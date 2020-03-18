@@ -240,6 +240,8 @@ setup_efi_grub() {
             else
                 part_path="/dev/${efi_disk}"
             fi
+            # We extracted disk path of partition. Keep only number
+            efi_part_number="${efi_part_number//p/}"
             # Backup
             if [ ! -e /backup/boot.img ] && [ ! -e /boot/partitions_table.txt ]; then
                 dd if="${part_path}${efi_part_number}" of="/backup/boot.img"
@@ -251,7 +253,7 @@ setup_efi_grub() {
 
             # Recreate EFI partition at the same position
             # Create Boot partition at third position
-            printf "d\n%s\nn\n%s\n\n+25M\nn\n%s\n\n\nt\n%s\n1\nw\n" "${efi_part_number//p/}" "${efi_part_number//p}" "${available_partnumber}" "${efi_part_number//p}" | fdisk --wipe-partition always "/dev/$efi_disk"
+            printf "d\n%s\nn\n%s\n\n+25M\nn\n%s\n\n\nt\n%s\n1\nw\n" "${efi_part_number}" "${efi_part_number}" "${available_partnumber}" "${efi_part_number}" | fdisk --wipe-partition always "/dev/$efi_disk"
             # EFI partition
             mkfs.vfat "${part_path}${efi_part_number}"
             # Boot partition
