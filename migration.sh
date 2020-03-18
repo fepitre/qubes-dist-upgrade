@@ -174,7 +174,6 @@ cat > /etc/default/grub << EOF
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="$(sed 's, release .*$,,g' /etc/system-release)"
 GRUB_DEFAULT=saved
-GRUB_DISABLE_SUBMENU=true
 GRUB_TERMINAL_OUTPUT="gfxterm"
 GRUB_CMDLINE_LINUX="@GRUB_CMDLINE_LINUX@"
 GRUB_CMDLINE_XEN_DEFAULT="@GRUB_CMDLINE_XEN_DEFAULT@"
@@ -194,6 +193,7 @@ update_legacy_grub() {
             echo "---> Updating Grub..."
             mkdir -p /backup
             cp /etc/default/grub /backup/default_grub
+            sed -i '/^GRUB_DISABLE_SUBMENU=.*/d' /etc/default/grub
             sed -i 's|^GRUB_THEME=.*|GRUB_THEME="/boot/grub2/themes/qubes/theme.txt"|g' /etc/default/grub
             grub2-mkconfig -o /boot/grub2/grub.cfg
         fi
