@@ -131,6 +131,7 @@ get_available_partnumber() {
     if [ -b "$disk" ]; then
         partitions_list="$(fdisk -l "$disk" | grep "^$disk" | awk -v disk="$disk" '{ gsub(disk,"",$1); print $1 }')"
         last_partnumber="$(echo "$partitions_list" | tail -1)"
+        last_partnumber="${last_partnumber//p/}"
         if [ -n "$last_partnumber" ]; then
             echo "$((last_partnumber + 1))"
         fi
