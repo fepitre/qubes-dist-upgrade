@@ -256,7 +256,12 @@ setup_efi_grub() {
             # Create Boot partition at third position
             printf "d\n%s\nn\n%s\n\n+25M\nn\n%s\n\n\nt\n%s\n1\nw\n" "${efi_part_number}" "${efi_part_number}" "${available_partnumber}" "${efi_part_number}" | fdisk --wipe-partition always "/dev/$efi_disk"
             # EFI partition
-            mkfs.vfat "${part_path}${efi_part_number}"
+            efi_part_fstype="$(lsblk -no fstype "${part_path}${efi_part_number}")"
+            if [ "${efi_part_fstype}" == "hfsplus" ]; then
+                mkfs.hfsplus "${part_path}${efi_part_number}"
+            else
+                mkfs.vfat "${part_path}${efi_part_number}"
+            fi
             # Boot partition
             mkfs.ext4 "${part_path}${available_partnumber}"
 
