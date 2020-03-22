@@ -418,7 +418,8 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # we need qubes-mgmt-salt-dom0-update >= 4.0.5
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts
-        qubesctl --skip-dom0 --templates --standalones state.sls update.qubes-vm
+        qubesctl --skip-dom0 --templates state.sls update.qubes-vm
+        qubesctl --skip-dom0 --standalones state.sls update.qubes-vm
         # Restart UpdateVM with updated templates (several fixes)
         qvm-shutdown --wait "$updatevm"
     fi
