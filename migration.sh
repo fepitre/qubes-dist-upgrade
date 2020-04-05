@@ -437,14 +437,17 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         echo "INFO: Xscreensaver has been killed. Desktop won't lock before next reboot."
         pkill xscreensaver || true
 
+        # Install Audio and Gui daemons
+        packages=@qubes-ui
+
         # Install new Qubes Grub theme before not being able to
         # download anything else due to distro-sync
-        grub_packages=grub2-qubes-theme
+        packages="$packages grub2-qubes-theme"
         if is_qubes_uefi; then
-            grub_packages="$grub_packages grub2-efi-x64"
+            packages="$packages grub2-efi-x64"
         fi
         # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts $grub_packages
+        qubes-dom0-update $dnf_opts $packages
 
         # At this point, when update is done, qubesd, libvirt
         # will fail due to Xen upgrade. A reboot is necessary.
