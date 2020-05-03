@@ -21,12 +21,14 @@ Options:
     --setup-efi-grub        (STAGE 4) Setup EFI Grub.
 
     --assumeyes             Automatically answer yes for all questions.
+    --double-metadata-size  Double current LVM thin pool metadata size.
     --usbvm                 Current UsbVM defined (default 'sys-usb').
     --netvm                 Current NetVM defined (default 'sys-net').
     --updatevm              Current UpdateVM defined (default 'sys-firewall').
 
-Remark:
-A reboot is necessary at the end of STAGE 3.
+Remarks:
+- A reboot is necessary at the end of STAGE 3.
+- Default LVM thin pool is assumed to be /dev/mapper/qubes_dom0-pool00.
 "
     exit 1
 }
@@ -333,6 +335,13 @@ setup_efi_grub() {
     fi
 }
 
+double_tmetadata() {
+    metadata_size="$(lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --units b | awk '{$1=$1;print}')"
+    if [ -n "$metadata_size" ]; then
+        lvextend -L +"$metadata_size" /dev/mapper/qubes_dom0-pool00_tmeta
+    fi
+}
+
 #-----------------------------------------------------------------------------#
 
 if [[ $EUID -ne 0 ]]; then
@@ -340,7 +349,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrsgyu:n:f: --long help,update,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,usbvm:,netvm:,updatevm: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o htrsgydu:n:f: --long help,update,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -358,6 +367,7 @@ while [[ $# -gt 0 ]]; do
         -s | --dist-upgrade ) dist_upgrade=1;;
         -g | --setup-efi-grub ) update_grub=1;;
         -y | --assumeyes ) assumeyes=1;;
+        -d | --double-metadata-size ) double_metadata_size=1;;
         -u | --usbvm ) usbvm="$2"; shift ;;
         -n | --netvm ) netvm="$2"; shift ;;
         -f | --updatevm ) updatevm="$2"; shift ;;
@@ -400,6 +410,10 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         else
             exit 0
         fi
+    fi
+
+    if [ "$double_metadata_size" == 1 ]; then
+        double_tmetadata
     fi
 
     if [ "$update" == "1" ]; then
