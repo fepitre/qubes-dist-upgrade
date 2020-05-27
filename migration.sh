@@ -17,7 +17,7 @@ This script is used for updating current QubesOS R4.0 to R4.1.
 Options:
     --update                (STAGE 1) Update of dom0, TemplatesVM and StandaloneVM.
     --release-upgrade       (STAGE 2) Update 'qubes-release' for Qubes R4.1.
-    --dist-upgrade          (STAGE 3) Upgrade to Qubes R4.1 and Fedora 31 repositories.
+    --dist-upgrade          (STAGE 3) Upgrade to Qubes R4.1 and Fedora 32 repositories.
     --setup-efi-grub        (STAGE 4) Setup EFI Grub.
 
     --assumeyes             Automatically answer yes for all questions.
@@ -442,7 +442,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         echo "---> Upgrading 'qubes-release'..."
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --releasever=4.1 qubes-release
-        rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-31-primary
+        rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-32-primary
     fi
 
     if [ "$dist_upgrade" == "1" ]; then
@@ -467,7 +467,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # will fail due to Xen upgrade. A reboot is necessary.
         # Notice also ugly fonts. This is temporary and it's fixed
         # at the next reboot.
-        echo "---> Upgrading to QubesOS R4.1 and Fedora 31 repositories..."
+        echo "---> Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --action=distro-sync || true
 
