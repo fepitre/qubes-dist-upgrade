@@ -456,7 +456,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
 
         # Install new Qubes Grub theme before not being able to
         # download anything else due to distro-sync
-        packages="$packages grub2-qubes-theme"
+        packages="$packages grub2-qubes-theme qubes-artwork-plymouth"
         if is_qubes_uefi; then
             packages="$packages grub2-efi-x64"
         fi
