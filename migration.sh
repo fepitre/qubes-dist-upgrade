@@ -336,11 +336,13 @@ setup_efi_grub() {
 }
 
 get_pool_size() {
-    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00 --units b | awk '{print substr($1, 1,length($1)-1)}'
+    # we remove leading space and trailing 'B'
+    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00 --units b | tr -d ' B'
 }
 
 get_tmeta_size() {
-    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --units b | awk '{print substr($1, 1,length($1)-1)}'
+    # we remove leading space and trailing 'B'
+    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --units b | tr -d ' B'
 }
 
 recommanded_size() {
@@ -359,7 +361,7 @@ set_tmeta_size() {
     local metadata_size
     metadata_size="$(recommanded_size)"
     if [ -n "$metadata_size" ]; then
-        lvextend -l "$metadata_size"b /dev/mapper/qubes_dom0-pool00_tmeta
+        lvextend -L "$metadata_size"b /dev/mapper/qubes_dom0-pool00_tmeta
     fi
 }
 
