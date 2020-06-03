@@ -335,10 +335,31 @@ setup_efi_grub() {
     fi
 }
 
-double_tmetadata() {
-    metadata_size="$(lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --units b | awk '{$1=$1;print}')"
+get_pool_size() {
+    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00 --units b | awk '{print substr($1, 1,length($1)-1)}'
+}
+
+get_tmeta_size() {
+    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --units b | awk '{print substr($1, 1,length($1)-1)}'
+}
+
+recommanded_size() {
+    local pool_size
+    local block_size="64k"
+    local max_thins="1000"
+    pool_size="$(get_pool_size)"
+    if [ "$pool_size" -ge 1 ]; then
+        reco_tmeta_size="$(thin_metadata_size -n -u b --block-size="$block_size" --pool-size="$pool_size"b --max-thins="$max_thins")"
+    fi
+    # returned size unit is bytes
+    echo "$((2*reco_tmeta_size))"
+}
+
+set_tmeta_size() {
+    local metadata_size
+    metadata_size="$(recommanded_size)"
     if [ -n "$metadata_size" ]; then
-        lvextend -L +"$metadata_size" /dev/mapper/qubes_dom0-pool00_tmeta
+        lvextend -l "$metadata_size"b /dev/mapper/qubes_dom0-pool00_tmeta
     fi
 }
 
@@ -412,8 +433,8 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         fi
     fi
 
-    if [ "$double_metadata_size" == 1 ]; then
-        double_tmetadata
+    if [ "$double_metadata_size" == 1 ] && [ "$(get_tmeta_size)" -lt "$(recommanded_size)" ]; then
+        set_tmeta_size
     fi
 
     if [ "$update" == "1" ]; then
