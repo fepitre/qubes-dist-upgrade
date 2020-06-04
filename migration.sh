@@ -500,7 +500,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         for pkg in $packages
         do
             # shellcheck disable=SC2086
-            cp "$(ls /var/lib/qubes/updates/rpm/$pkg*.rpm)" /tmp/rpm-pre-distro-sync/
+            cp /var/lib/qubes/updates/rpm/$pkg*.rpm /tmp/rpm-pre-distro-sync/
         done
 
         # At this point, when update is done, qubesd, libvirt
@@ -514,12 +514,10 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # Install the downloaded packages at pre-distro-sync
         # That was not possible to install them before else it
         # messes the whole distro-sync
-        # shellcheck disable=SC2086
-        # shellcheck disable=SC2046
         if [ "$assumeyes" == 1 ]; then
-            dnf install -y $(ls /tmp/rpm-pre-distro-sync/*.rpm)
+            dnf install -y /tmp/rpm-pre-distro-sync/*.rpm
         else
-            dnf install $(ls /tmp/rpm-pre-distro-sync/*.rpm)
+            dnf install /tmp/rpm-pre-distro-sync/*.rpm
         fi
 
         # Fix dbus to dbus-broker change
