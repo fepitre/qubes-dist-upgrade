@@ -205,7 +205,9 @@ update_legacy_grub() {
         plymouth-set-default-theme qubes-dark
 
         # Regenerate initrd
-        dracut -f
+        # We need to pick latest version before reboot
+        # shellcheck disable=SC2012
+        dracut -f --kver "$(ls -1 /lib/modules/ | tail -1)"
     fi
 }
 
