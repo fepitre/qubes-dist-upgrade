@@ -481,7 +481,9 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         pkill xscreensaver || true
 
         # Install Audio and Gui daemons
-        packages=@qubes-ui
+        # it should be pulled by distro-sync
+        # but better to ensure that
+        packages="qubes-audio-daemon qubes-gui-daemon"
 
         # Install new Qubes Grub theme before not being able to
         # download anything else due to distro-sync
@@ -491,7 +493,13 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         fi
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --downloadonly $packages
-        cp -r /var/lib/qubes/updates/rpm /tmp/rpm-pre-distro-sync
+
+        mkdir /tmp/rpm-pre-distro-sync
+        for pkg in $packages
+        do
+            # shellcheck disable=SC2086
+            cp "$(ls /var/lib/qubes/updates/rpm/$pkg*.rpm)" /tmp/rpm-pre-distro-sync/
+        done
 
         # At this point, when update is done, qubesd, libvirt
         # will fail due to Xen upgrade. A reboot is necessary.
@@ -506,7 +514,11 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # messes the whole distro-sync
         # shellcheck disable=SC2086
         # shellcheck disable=SC2046
-        dnf install $dnf_opts $(ls /tmp/rpm-pre-distro-sync/*.rpm)
+        if [ "$assumeyes" == 1 ]; then
+            dnf install -y $(ls /tmp/rpm-pre-distro-sync/*.rpm)
+        else
+            dnf install $(ls /tmp/rpm-pre-distro-sync/*.rpm)
+        fi
 
         # Fix dbus to dbus-broker change
         systemctl enable dbus-broker
