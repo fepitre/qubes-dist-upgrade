@@ -200,6 +200,12 @@ update_legacy_grub() {
             sed -i 's|^GRUB_THEME=.*|GRUB_THEME="/boot/grub2/themes/qubes/theme.txt"|g' /etc/default/grub
             grub2-mkconfig -o /boot/grub2/grub.cfg
         fi
+
+        # Set default plymouth theme
+        plymouth-set-default-theme qubes-dark
+
+        # Regenerate initrd
+        dracut -f
     fi
 }
 
@@ -484,7 +490,8 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             packages="$packages grub2-efi-x64"
         fi
         # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts $packages
+        qubes-dom0-update $dnf_opts --downloadonly $packages
+        cp -r /var/lib/qubes/updates/rpm /tmp/rpm-pre-distro-sync
 
         # At this point, when update is done, qubesd, libvirt
         # will fail due to Xen upgrade. A reboot is necessary.
@@ -493,6 +500,13 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         echo "---> Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --action=distro-sync || true
+
+        # Install the downloaded packages at pre-distro-sync
+        # That was not possible to install them before else it
+        # messes the whole distro-sync
+        # shellcheck disable=SC2086
+        # shellcheck disable=SC2046
+        dnf install $dnf_opts $(ls /tmp/rpm-pre-distro-sync/*.rpm)
 
         # Update legacy Grub if needed
         update_legacy_grub
