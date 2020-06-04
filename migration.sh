@@ -508,6 +508,9 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # shellcheck disable=SC2046
         dnf install $dnf_opts $(ls /tmp/rpm-pre-distro-sync/*.rpm)
 
+        # Fix dbus to dbus-broker change
+        systemctl enable dbus-broker
+
         # Update legacy Grub if needed
         update_legacy_grub
     fi
