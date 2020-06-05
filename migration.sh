@@ -393,7 +393,6 @@ eval set -- "$OPTS"
 
 # Common DNF options
 dnf_opts_noclean='--best --allowerasing --enablerepo=*testing*'
-dnf_opts="--clean ${dnf_opts_noclean}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -412,8 +411,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$assumeyes" == "1" ];  then
-    dnf_opts="$dnf_opts -y"
+    dnf_opts_noclean="${dnf_opts_noclean} -y"
 fi
+
+dnf_opts="--clean ${dnf_opts_noclean}"
 
 # Default values
 usbvm="${usbvm:-sys-usb}"
