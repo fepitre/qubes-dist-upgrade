@@ -35,6 +35,10 @@ Remarks:
 
 exit_migration() {
     local exit_code=$?
+
+    # Cleaned pre-distro-sync packages
+    rm -rf /tmp/rpm-pre-distro-sync
+
     if [ $exit_code -gt 0 ]; then
         echo "-> Launch restoration..."
         if ! is_qubes_uefi && [ -e /backup/default_grub ]; then
@@ -388,7 +392,8 @@ fi
 eval set -- "$OPTS"
 
 # Common DNF options
-dnf_opts='--clean --best --allowerasing --enablerepo=*testing*'
+dnf_opts_noclean='--best --allowerasing --enablerepo=*testing*'
+dnf_opts="--clean ${dnf_opts_noclean}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -509,7 +514,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # at the next reboot.
         echo "---> Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts --action=distro-sync || true
+        qubes-dom0-update ${dnf_opts_noclean} --action=distro-sync || true
 
         # Install the downloaded packages at pre-distro-sync
         # That was not possible to install them before else it
