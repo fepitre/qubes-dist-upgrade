@@ -88,18 +88,29 @@ confirm() {
     esac
 }
 
+get_reference_from_fstab() {
+    local mountpoint="$1"
+    if [ -n "$mountpoint" ]; then
+        sed '/^[[:blank:]]*#/d' /etc/fstab | grep -Po "^[^ \t]+[ \t]+${mountpoint}[ \t]+" | awk '{print $1}'
+    fi
+}
+
 is_boot_partition_exists() {
-    grep -v /boot/efi /etc/fstab | grep -q /boot
+    boot="$(get_reference_from_fstab /boot)"
+    test -n "$boot"
 }
 
 is_qubes_uefi() {
-    grep -q /boot/efi /etc/fstab >/dev/null
+    boot_efi="$(get_reference_from_fstab /boot/efi)"
+    test -n "$boot_efi"
 }
 
-get_uuid_from_fstab() {
-    local mountpoint="$1"
-    if [ -n "$mountpoint" ]; then
-        sed '/^[[:blank:]]*#/d' /etc/fstab | grep "$mountpoint" | awk '{print $1}' | cut -d'=' -f2
+get_uuid_from_mountpoint() {
+    reference="$(get_reference_from_fstab "$1")"
+    if [ "${reference/UUID=}" != "$reference" ]; then
+        echo "${reference/UUID=}"
+    else
+        get_uuid_from_block "$reference"
     fi
 }
 
@@ -142,7 +153,7 @@ get_available_partnumber() {
 
 get_boot_efi_size(){
     local uuid
-    efi_uuid="$(get_uuid_from_fstab /boot/efi)"
+    efi_uuid="$(get_uuid_from_mountpoint /boot/efi)"
     if [ -n "$efi_uuid" ]; then
         lsblk -b -no size "/dev/disk/by-uuid/$efi_uuid"
     fi
@@ -151,7 +162,7 @@ get_boot_efi_size(){
 update_prechecks() {
     if ! is_boot_partition_exists; then
         if is_qubes_uefi; then
-            efi_uuid="$(get_uuid_from_fstab /boot/efi)"
+            efi_uuid="$(get_uuid_from_mountpoint /boot/efi)"
             if [ -n "$efi_uuid" ]; then
                 # Minimum size for boot partition: 500Mo
                 min_efi_size=524288000
@@ -232,7 +243,7 @@ setup_efi_grub() {
 
     if is_qubes_uefi; then
         umount /boot/efi || true
-        efi_uuid="$(get_uuid_from_fstab /boot/efi)"
+        efi_uuid="$(get_uuid_from_mountpoint /boot/efi)"
         efi_part_number="$(get_partnumber_from_uuid "$efi_uuid")"
         efi_disk="$(get_disk_from_uuid "$efi_uuid")"
         if [ -z "${efi_part_number}" ] || [ ! -b "/dev/${efi_disk}" ]; then
@@ -268,11 +279,11 @@ setup_efi_grub() {
             # Recreate EFI partition at the same position
             # Create Boot partition at third position
             printf "d\n%s\nn\n%s\n\n+25M\nn\n%s\n\n\nt\n%s\n1\nw\n" "${efi_part_number}" "${efi_part_number}" "${available_partnumber}" "${efi_part_number}" | fdisk --wipe-partition always "/dev/$efi_disk"
-            # EFI partition
+            # Set new partition EFI boot with the same UUID as previous
             if [ "${efi_part_fstype}" == "hfsplus" ]; then
-                mkfs.hfsplus "${part_path}${efi_part_number}"
+                mkfs.hfsplus -U "$efi_uuid" "${part_path}${efi_part_number}"
             else
-                mkfs.vfat "${part_path}${efi_part_number}"
+                mkfs.vfat -i "$efi_uuid" "${part_path}${efi_part_number}"
             fi
             # Boot partition
             mkfs.ext4 "${part_path}${available_partnumber}"
@@ -290,15 +301,12 @@ setup_efi_grub() {
             mkdir -p /boot/efi/EFI/qubes/fonts /boot/efi/EFI/qubes/entries
             cp -ar /backup/efi/EFI/qubes/fonts /boot/efi/EFI/qubes/
             cp -a /backup/efi/EFI/qubes/grubx64.efi /boot/efi/EFI/qubes/
-
-            # Replace old EFI UUID
-            new_efi_uuid="$(get_uuid_from_block "${part_path}${efi_part_number}")"
-            # There is no reason for new_efi_uuid being empty
-            # but in case we fallback to known entry point
-            if [ -n "$new_efi_uuid" ]; then
-                sed -i "s|$efi_uuid|$new_efi_uuid|g" /etc/fstab
-            else
-                sed -i "s|UUID=$efi_uuid|${part_path}${efi_part_number}|g" /etc/fstab
+          
+            # Replace block reference in fstab by UUID
+            # for /boot/efi it needed
+            if ! grep -q "UUID=$efi_uuid" /etc/fstab; then
+                boot_efi_ref="$(get_reference_from_fstab /boot/efi)"
+                sed -i "s|$boot_efi_ref|UUID=$efi_uuid|g" /etc/fstab
             fi
 
             # Add entry for /boot partition
