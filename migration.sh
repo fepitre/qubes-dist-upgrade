@@ -35,10 +35,6 @@ Remarks:
 
 exit_migration() {
     local exit_code=$?
-
-    # Cleaned pre-distro-sync packages
-    rm -rf /tmp/rpm-pre-distro-sync
-
     if [ $exit_code -gt 0 ]; then
         echo "-> Launch restoration..."
         if ! is_qubes_uefi && [ -e /backup/default_grub ]; then
@@ -502,35 +498,37 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --downloadonly $packages
 
-        mkdir /tmp/rpm-pre-distro-sync
-        for pkg in $packages
-        do
-            # shellcheck disable=SC2086
-            cp /var/lib/qubes/updates/rpm/$pkg*.rpm /tmp/rpm-pre-distro-sync/
-        done
-
-        # At this point, when update is done, qubesd, libvirt
+        # 1) At this point, when update is done, qubesd, libvirt
         # will fail due to Xen upgrade. A reboot is necessary.
         # Notice also ugly fonts. This is temporary and it's fixed
         # at the next reboot.
+        # 2) Don't clean cache of previous transaction for the requested packages.
         echo "---> Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # shellcheck disable=SC2086
-        qubes-dom0-update ${dnf_opts_noclean} --action=distro-sync || true
+        qubes-dom0-update ${dnf_opts_noclean} --downloadonly --action=distro-sync || exit_code=$?
+        if [ -z "$exit_code" ] || [ "$exit_code" == 100 ]; then
+            if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all VM?"; then
+                qvm-shutdown --wait --all
 
-        # Install the downloaded packages at pre-distro-sync
-        # That was not possible to install them before else it
-        # messes the whole distro-sync
-        if [ "$assumeyes" == 1 ]; then
-            dnf install -y /tmp/rpm-pre-distro-sync/*.rpm
+                if [ "$assumeyes" == 1 ]; then
+                    dnf distro-sync -y
+                else
+                    dnf distro-sync
+                fi
+
+                # Fix dbus to dbus-broker change
+                systemctl enable dbus-broker
+
+                # Update legacy Grub if needed
+                update_legacy_grub
+
+                echo "INFO: Please reboot before continuing."
+            else
+                echo "WARNING: dist-upgrade stage canceled."
+            fi
         else
-            dnf install /tmp/rpm-pre-distro-sync/*.rpm
+            false
         fi
-
-        # Fix dbus to dbus-broker change
-        systemctl enable dbus-broker
-
-        # Update legacy Grub if needed
-        update_legacy_grub
     fi
 
     if [ "$update_grub" == "1" ]; then
