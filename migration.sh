@@ -99,7 +99,7 @@ is_qubes_uefi() {
 get_uuid_from_fstab() {
     local mountpoint="$1"
     if [ -n "$mountpoint" ]; then
-        grep "$mountpoint" /etc/fstab | awk '{print $1}' | cut -d'=' -f2
+        sed '/^[[:blank:]]*#/d' /etc/fstab | grep "$mountpoint" | awk '{print $1}' | cut -d'=' -f2
     fi
 }
 
