@@ -519,9 +519,9 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                 qvm-shutdown --wait --all
 
                 if [ "$assumeyes" == 1 ]; then
-                    dnf distro-sync -y
+                    dnf distro-sync -y --best --allowerasing
                 else
-                    dnf distro-sync
+                    dnf distro-sync --best --allowerasing
                 fi
 
                 # Fix dbus to dbus-broker change
