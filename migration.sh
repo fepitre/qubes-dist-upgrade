@@ -27,7 +27,6 @@ Options:
     --updatevm              Current UpdateVM defined (default 'sys-firewall').
 
 Remarks:
-- A reboot is necessary at the end of STAGE 3.
 - Default LVM thin pool is assumed to be /dev/mapper/qubes_dom0-pool00.
 "
     exit 1
@@ -195,10 +194,14 @@ GRUB_DISABLE_RECOVERY="true"
 GRUB_THEME="/boot/grub2/themes/qubes/theme.txt"
 GRUB_DISABLE_OS_PROBER="true"
 EOF
+}
 
-# Use current default options
-sed -i "s|@GRUB_CMDLINE_LINUX@|$(cat /proc/cmdline)|g" /etc/default/grub
-sed -i "s|@GRUB_CMDLINE_XEN_DEFAULT@|$(xl info xen_commandline)|g" /etc/default/grub
+update_default_grub_config() {
+    # Use current default options
+    sed -i "s|@GRUB_CMDLINE_LINUX@|$(cat /tmp/kernel_cmdline)|g" /etc/default/grub
+    sed -i "s|@GRUB_CMDLINE_XEN_DEFAULT@|$(cat /tmp/xen_cmdline)|g" /etc/default/grub
+    sed -i '/^GRUB_DISABLE_SUBMENU=.*/d' /etc/default/grub
+    sed -i 's|^GRUB_THEME=.*|GRUB_THEME="/boot/grub2/themes/qubes/theme.txt"|g' /etc/default/grub
 }
 
 update_legacy_grub() {
@@ -207,8 +210,7 @@ update_legacy_grub() {
             echo "---> Updating Grub..."
             mkdir -p /backup
             cp /etc/default/grub /backup/default_grub
-            sed -i '/^GRUB_DISABLE_SUBMENU=.*/d' /etc/default/grub
-            sed -i 's|^GRUB_THEME=.*|GRUB_THEME="/boot/grub2/themes/qubes/theme.txt"|g' /etc/default/grub
+            update_default_grub_config
             grub2-mkconfig -o /boot/grub2/grub.cfg
         fi
 
@@ -331,6 +333,7 @@ setup_efi_grub() {
 
         # Create default Grub config
         default_grub_config
+        update_default_grub_config
 
         # Create Grub config
         mount /boot/efi || true
@@ -348,7 +351,8 @@ setup_efi_grub() {
         plymouth-set-default-theme qubes-dark
 
         # Regenerate initrd
-        dracut -f
+        # shellcheck disable=SC2012
+        dracut -f --kver "$(ls -1 /lib/modules/ | tail -1)"
     fi
 }
 
@@ -445,6 +449,10 @@ update_prechecks
 
 trap 'exit_migration' 0 1 2 3 6 15
 if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
+    # Backup xen and kernel cmdline
+    cat /proc/cmdline > /tmp/kernel_cmdline
+    xl info xen_commandline > /tmp/xen_cmdline
+
     # Ask before shutdown
     if [ ${#running_vms[@]} -gt 0 ]; then
         if [ "$assumeyes" == "1" ] || confirm "---> Allow shutdown of unnecessary VM: ${running_vms[*]}?"; then
@@ -507,11 +515,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --downloadonly $packages
 
-        # 1) At this point, when update is done, qubesd, libvirt
-        # will fail due to Xen upgrade. A reboot is necessary.
-        # Notice also ugly fonts. This is temporary and it's fixed
-        # at the next reboot.
-        # 2) Don't clean cache of previous transaction for the requested packages.
+        # Don't clean cache of previous transaction for the requested packages.
         echo "---> Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # shellcheck disable=SC2086
         qubes-dom0-update ${dnf_opts_noclean} --downloadonly --action=distro-sync || exit_code=$?
