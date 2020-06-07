@@ -302,7 +302,7 @@ setup_efi_grub() {
             mkdir -p /boot/efi/EFI/qubes/fonts /boot/efi/EFI/qubes/entries
             cp -ar /backup/efi/EFI/qubes/fonts /boot/efi/EFI/qubes/
             cp -a /backup/efi/EFI/qubes/grubx64.efi /boot/efi/EFI/qubes/
-          
+
             # Replace block reference in fstab by UUID
             # for /boot/efi it needed
             if ! grep -q "UUID=$efi_uuid" /etc/fstab; then
@@ -519,10 +519,29 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all VM?"; then
                 qvm-shutdown --wait --all
 
+                # distro-sync phase
                 if [ "$assumeyes" == 1 ]; then
                     dnf distro-sync -y --best --allowerasing
                 else
                     dnf distro-sync --best --allowerasing
+                fi
+
+                # install requested packages
+                for pkg in $packages
+                do
+                    pkg_rpm="$(ls /var/lib/qubes/updates/rpm/$pkg*.rpm)"
+                    if [ -e "$pkg_rpm" ]; then
+                        packages_rpm="$packages_rpm $pkg_rpm"
+                    fi
+                done
+
+                if [ -n "$packages_rpm" ]; then
+                    # shellcheck disable=SC2086
+                    if [ "$assumeyes" == 1 ]; then
+                        dnf install -y --best --allowerasing $packages_rpm
+                    else
+                        dnf install --best --allowerasing $packages_rpm
+                    fi
                 fi
 
                 # Fix dbus to dbus-broker change
