@@ -283,7 +283,8 @@ setup_efi_grub() {
             if [ "${efi_part_fstype}" == "hfsplus" ]; then
                 mkfs.hfsplus -U "$efi_uuid" "${part_path}${efi_part_number}"
             else
-                mkfs.vfat -i "$efi_uuid" "${part_path}${efi_part_number}"
+                volid=${efi_uuid/-/}
+                mkfs.vfat -i "$volid" "${part_path}${efi_part_number}"
             fi
             # Boot partition
             mkfs.ext4 "${part_path}${available_partnumber}"
