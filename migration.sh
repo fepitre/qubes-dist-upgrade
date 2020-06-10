@@ -489,9 +489,9 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$release_upgrade" == "1" ]; then
-        echo "---> Upgrading 'qubes-release'..."
+        echo "---> Upgrading 'qubes-release' and 'python?-systemd'..."
         # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts --releasever=4.1 qubes-release
+        qubes-dom0-update $dnf_opts --releasever=4.1 qubes-release 'python?-systemd'
         rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-32-primary
     fi
 
