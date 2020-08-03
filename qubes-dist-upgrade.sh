@@ -209,6 +209,9 @@ update_legacy_grub() {
         if [ -e /etc/default/grub ]; then
             echo "---> Updating Grub..."
             mkdir -p /backup
+            if [ -e /backup/default_grub ]; then
+                mv /backup/default_grub "/backup/default_grub-$(date +%s)"
+            fi
             cp /etc/default/grub /backup/default_grub
             update_default_grub_config
             grub2-mkconfig -o /boot/grub2/grub.cfg
@@ -281,6 +284,14 @@ setup_efi_grub() {
             # Recreate EFI partition at the same position
             # Create Boot partition at third position
             printf "d\n%s\nn\n%s\n\n+25M\nn\n%s\n\n\nt\n%s\n1\nw\n" "${efi_part_number}" "${efi_part_number}" "${available_partnumber}" "${efi_part_number}" | fdisk --wipe-partition always "/dev/$efi_disk"
+
+            # Check new boot partition has been created
+            newavailable_partnumber="$(get_available_partnumber "/dev/${efi_disk}")"
+            if [ "$newavailable_partnumber" == "$available_partnumber" ] || [ ! -b "${part_path}${available_partnumber}" ]; then
+                echo "ERROR: An error occured while creating boot partition"
+                exit 1
+            fi
+
             # Set new partition EFI boot with the same UUID as previous
             if [ "${efi_part_fstype}" == "hfsplus" ]; then
                 mkfs.hfsplus -U "$efi_uuid" "${part_path}${efi_part_number}"
@@ -553,8 +564,6 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
 
                 # Update legacy Grub if needed
                 update_legacy_grub
-
-                echo "INFO: Please reboot before continuing."
             else
                 echo "WARNING: dist-upgrade stage canceled."
             fi
@@ -567,4 +576,5 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         echo "---> Installing EFI Grub..."
         setup_efi_grub
     fi
+    echo "INFO: Please reboot before continuing."
 fi
