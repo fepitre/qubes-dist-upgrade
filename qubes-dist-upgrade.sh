@@ -369,12 +369,12 @@ setup_efi_grub() {
 
 get_pool_size() {
     # we remove leading space and trailing 'B'
-    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00 --units b | tr -d ' B'
+    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00 --nosuffix --units b
 }
 
 get_tmeta_size() {
     # we remove leading space and trailing 'B'
-    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --units b | tr -d ' B'
+    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --nosuffix --units b
 }
 
 recommanded_size() {
