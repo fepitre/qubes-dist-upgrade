@@ -536,9 +536,9 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
 
                 # distro-sync phase
                 if [ "$assumeyes" == 1 ]; then
-                    dnf distro-sync -y --best --allowerasing
+                    dnf distro-sync -y --exclude="kernel-$(uname -r)" --best --allowerasing
                 else
-                    dnf distro-sync --best --allowerasing
+                    dnf distro-sync --exclude="kernel-$(uname -r)" --best --allowerasing
                 fi
 
                 # install requested packages
