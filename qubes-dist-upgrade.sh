@@ -15,19 +15,16 @@ echo "Usage: $0 [OPTIONS]...
 This script is used for updating current QubesOS R4.0 to R4.1.
 
 Options:
+    --double-metadata-size  (STAGE 0) Double current LVM thin pool metadata size.
     --update                (STAGE 1) Update of dom0, TemplatesVM and StandaloneVM.
     --release-upgrade       (STAGE 2) Update 'qubes-release' for Qubes R4.1.
     --dist-upgrade          (STAGE 3) Upgrade to Qubes R4.1 and Fedora 32 repositories.
     --setup-efi-grub        (STAGE 4) Setup EFI Grub.
 
     --assumeyes             Automatically answer yes for all questions.
-    --double-metadata-size  Double current LVM thin pool metadata size.
     --usbvm                 Current UsbVM defined (default 'sys-usb').
     --netvm                 Current NetVM defined (default 'sys-net').
     --updatevm              Current UpdateVM defined (default 'sys-firewall').
-
-Remarks:
-- Default LVM thin pool is assumed to be /dev/mapper/qubes_dom0-pool00.
 "
     exit 1
 }
@@ -367,21 +364,29 @@ setup_efi_grub() {
     fi
 }
 
+get_thin_pool_name() {
+    local root_dev root_pool
+    root_dev=$(df --output=source / | tail -1)
+    case "$root_dev" in (/dev/mapper/*) ;; (*) return;; esac
+    root_pool=$(lvs --no-headings --separator=/ -o vg_name,pool_lv "$root_dev" | tr -d ' ')
+    echo "$root_pool"
+}
+
 get_pool_size() {
-    # we remove leading space and trailing 'B'
-    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00 --nosuffix --units b
+    # we remove leading space
+    lvs --no-headings -o size "$1" --nosuffix --units b | tr -d ' '
 }
 
 get_tmeta_size() {
-    # we remove leading space and trailing 'B'
-    lvs --no-headings -o size /dev/mapper/qubes_dom0-pool00_tmeta --nosuffix --units b
+    # we remove leading space
+    lvs --no-headings -o size "${1}_tmeta" --nosuffix --units b | tr -d ' '
 }
 
-recommanded_size() {
+recommended_size() {
     local pool_size
     local block_size="64k"
     local max_thins="1000"
-    pool_size="$(get_pool_size)"
+    pool_size="$(get_pool_size "$1")"
     if [ "$pool_size" -ge 1 ]; then
         reco_tmeta_size="$(thin_metadata_size -n -u b --block-size="$block_size" --pool-size="$pool_size"b --max-thins="$max_thins")"
     fi
@@ -391,9 +396,9 @@ recommanded_size() {
 
 set_tmeta_size() {
     local metadata_size
-    metadata_size="$(recommanded_size)"
+    metadata_size="$(recommended_size "$1")"
     if [ -n "$metadata_size" ]; then
-        lvextend -L "$metadata_size"b /dev/mapper/qubes_dom0-pool00_tmeta
+        lvextend -L "$metadata_size"b "${1}_tmeta"
     fi
 }
 
@@ -473,8 +478,16 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         fi
     fi
 
-    if [ "$double_metadata_size" == 1 ] && [ "$(get_tmeta_size)" -lt "$(recommanded_size)" ]; then
-        set_tmeta_size
+    pool_name=$(get_thin_pool_name)
+    if [ "$double_metadata_size" == 1 ]; then
+        if [ -z "$pool_name" ]; then
+            echo "---> (STAGE 0) Skipping - no LVM thin pool found"
+        elif [ "$(get_tmeta_size "$pool_name")" -ge "$(recommanded_size "$pool_name")" ]; then
+            echo "---> (STAGE 0) Skipping - already right size"
+        else
+            echo "---> (STAGE 0) Adjusting LVM thin pool metadata size..."
+            set_tmeta_size "$pool_name"
+        fi
     fi
 
     if [ "$update" == "1" ]; then
