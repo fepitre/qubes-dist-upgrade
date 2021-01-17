@@ -20,6 +20,7 @@ Options:
     --release-upgrade       (STAGE 2) Update 'qubes-release' for Qubes R4.1.
     --dist-upgrade          (STAGE 3) Upgrade to Qubes R4.1 and Fedora 32 repositories.
     --setup-efi-grub        (STAGE 4) Setup EFI Grub.
+    --all                   Execute all the above stages in one call.
 
     --assumeyes             Automatically answer yes for all questions.
     --usbvm                 Current UsbVM defined (default 'sys-usb').
@@ -409,7 +410,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrsgydu:n:f: --long help,update,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o htrsgydu:n:f: --long help,all,update,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -422,6 +423,13 @@ dnf_opts_noclean='--best --allowerasing --enablerepo=*testing*'
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h | --help) usage ;;
+        -a | --all)
+            update=1
+            release_upgrade=1
+            dist_upgrade=1
+            update_grub=1
+            double_metadata_size=1
+            ;;
         -t | --update ) update=1;;
         -r | --release-upgrade) release_upgrade=1;;
         -s | --dist-upgrade ) dist_upgrade=1;;
@@ -447,7 +455,7 @@ netvm="${netvm:-sys-net}"
 updatevm="${updatevm:-sys-firewall}"
 
 # We are goig to shutdown most of the VMs
-mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name)
+mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name 2>/dev/null)
 keep_running=( dom0 "$usbvm" "$netvm" "$updatevm")
 
 for vm in "${keep_running[@]}"
@@ -467,7 +475,10 @@ trap 'exit_migration' 0 1 2 3 6 15
 if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     # Backup xen and kernel cmdline
     cat /proc/cmdline > /tmp/kernel_cmdline
-    xl info xen_commandline > /tmp/xen_cmdline
+    xl info xen_commandline > /tmp/xen_cmdline || {
+        echo "ERROR: Failed to get Xen cmdline, have you restarted the system after previous upgrade stage?"
+        exit 1
+    }
 
     # Ask before shutdown
     if [ ${#running_vms[@]} -gt 0 ]; then
@@ -502,7 +513,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             exit 1
         fi
 
-        echo "---> Updating dom0, Templates VMs and StandaloneVMs..."
+        echo "---> (STAGE 1) Updating dom0, Templates VMs and StandaloneVMs..."
         # we need qubes-mgmt-salt-dom0-update >= 4.0.5
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts
@@ -513,13 +524,14 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$release_upgrade" == "1" ]; then
-        echo "---> Upgrading 'qubes-release' and 'python?-systemd'..."
+        echo "---> (STAGE 2) Upgrading 'qubes-release' and 'python?-systemd'..."
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --releasever=4.1 qubes-release 'python?-systemd'
         rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-32-primary
     fi
 
     if [ "$dist_upgrade" == "1" ]; then
+        echo "---> (STAGE 3) Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # xscreensaver remains unsuable while upgrading
         # it's impossible to unlock it due to PAM update
         echo "INFO: Xscreensaver has been killed. Desktop won't lock before next reboot."
@@ -540,7 +552,6 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         qubes-dom0-update $dnf_opts --downloadonly $packages
 
         # Don't clean cache of previous transaction for the requested packages.
-        echo "---> Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # shellcheck disable=SC2086
         qubes-dom0-update ${dnf_opts_noclean} --downloadonly --action=distro-sync || exit_code=$?
         if [ -z "$exit_code" ] || [ "$exit_code" == 100 ]; then
@@ -586,7 +597,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$update_grub" == "1" ]; then
-        echo "---> Installing EFI Grub..."
+        echo "---> (STAGE 4) Installing EFI Grub..."
         setup_efi_grub
     fi
     echo "INFO: Please reboot before continuing."
