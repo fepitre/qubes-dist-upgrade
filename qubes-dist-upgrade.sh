@@ -403,6 +403,30 @@ set_tmeta_size() {
     fi
 }
 
+shutdown_nonessential_vms() {
+    mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name 2>/dev/null)
+    keep_running=( dom0 "$usbvm" "$netvm" "$updatevm")
+
+    for vm in "${keep_running[@]}"
+    do
+        for i in "${!running_vms[@]}"
+        do
+            if [ "${running_vms[i]}" == "$vm" ]; then
+                unset "running_vms[i]"
+            fi
+        done
+    done
+
+    # Ask before shutdown
+    if [ ${#running_vms[@]} -gt 0 ]; then
+        if [ "$assumeyes" == "1" ] || confirm "---> Allow shutdown of unnecessary VM: ${running_vms[*]}?"; then
+            qvm-shutdown --wait "${running_vms[@]}"
+        else
+            exit 0
+        fi
+    fi
+}
+
 #-----------------------------------------------------------------------------#
 
 if [[ $EUID -ne 0 ]]; then
@@ -454,20 +478,6 @@ usbvm="${usbvm:-sys-usb}"
 netvm="${netvm:-sys-net}"
 updatevm="${updatevm:-sys-firewall}"
 
-# We are goig to shutdown most of the VMs
-mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name 2>/dev/null)
-keep_running=( dom0 "$usbvm" "$netvm" "$updatevm")
-
-for vm in "${keep_running[@]}"
-do
-    for i in "${!running_vms[@]}"
-    do
-        if [ "${running_vms[i]}" == "$vm" ]; then
-            unset "running_vms[i]"
-        fi
-    done
-done
-
 # Run prechecks first
 update_prechecks
 
@@ -480,14 +490,8 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         exit 1
     }
 
-    # Ask before shutdown
-    if [ ${#running_vms[@]} -gt 0 ]; then
-        if [ "$assumeyes" == "1" ] || confirm "---> Allow shutdown of unnecessary VM: ${running_vms[*]}?"; then
-            qvm-shutdown --wait "${running_vms[@]}"
-        else
-            exit 0
-        fi
-    fi
+    # Shutdown nonessential VMs
+    shutdown_nonessential_vms
 
     pool_name=$(get_thin_pool_name)
     if [ "$double_metadata_size" == 1 ]; then
@@ -519,6 +523,10 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         qubes-dom0-update $dnf_opts
         qubesctl --skip-dom0 --templates state.sls update.qubes-vm
         qubesctl --skip-dom0 --standalones state.sls update.qubes-vm
+
+        # Shutdown nonessential VMs again if some would have other NetVM than UpdateVM (e.g. sys-whonix)
+        shutdown_nonessential_vms
+
         # Restart UpdateVM with updated templates (several fixes)
         qvm-shutdown --wait "$updatevm"
     fi
