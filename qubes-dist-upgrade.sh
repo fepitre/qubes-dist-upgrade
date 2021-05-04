@@ -1,11 +1,13 @@
 #!/bin/bash
 
-# Frédéric Pierret <fepitre> frederic.pierret@qubes-os.org
+# Frédéric Pierret (fepitre) frederic.pierret@qubes-os.org
 
 set -e
 if [ "${VERBOSE:-0}" -ge 2 ] || [ "${DEBUG:-0}" -eq 1 ]; then
     set -x
 fi
+
+localdir="$(readlink -f "$(dirname "$0")")"
 
 #-----------------------------------------------------------------------------#
 
@@ -15,17 +17,23 @@ echo "Usage: $0 [OPTIONS]...
 This script is used for updating current QubesOS R4.0 to R4.1.
 
 Options:
-    --double-metadata-size  (STAGE 0) Double current LVM thin pool metadata size.
-    --update                (STAGE 1) Update of dom0, TemplatesVM and StandaloneVM.
-    --release-upgrade       (STAGE 2) Update 'qubes-release' for Qubes R4.1.
-    --dist-upgrade          (STAGE 3) Upgrade to Qubes R4.1 and Fedora 32 repositories.
-    --setup-efi-grub        (STAGE 4) Setup EFI Grub.
-    --all                   Execute all the above stages in one call.
+    --double-metadata-size          (STAGE 0) Double current LVM thin pool metadata size.
+    --update                        (STAGE 1) Update of dom0, TemplatesVM and StandaloneVM.
+    --template-standalone-upgrade   (STAGE 2) Upgrade templates and standalone VMs to R4.1 repository.
+    --release-upgrade               (STAGE 3) Update 'qubes-release' for Qubes R4.1.
+    --dist-upgrade                  (STAGE 4) Upgrade to Qubes R4.1 and Fedora 32 repositories.
+    --setup-efi-grub                (STAGE 5) Setup EFI Grub.
+    --all                           Execute all the above stages in one call.
 
-    --assumeyes             Automatically answer yes for all questions.
-    --usbvm                 Current UsbVM defined (default 'sys-usb').
-    --netvm                 Current NetVM defined (default 'sys-net').
-    --updatevm              Current UpdateVM defined (default 'sys-firewall').
+    --assumeyes                     Automatically answer yes for all questions.
+    --usbvm                         Current UsbVM defined (default 'sys-usb').
+    --netvm                         Current NetVM defined (default 'sys-net').
+    --updatevm                      Current UpdateVM defined (default 'sys-firewall').
+    --skip-template-upgrade         Don't upgrade TemplateVM to R4.1 repositories.
+    --skip-standalone-upgrade       Don't upgrade StandaloneVM to R4.1 repositories.
+    
+    --resync-appmenus-features      Resync applications and features. To be ran individually
+                                    after reboot.
 "
     exit 1
 }
@@ -434,7 +442,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrsgydu:n:f: --long help,all,update,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -449,6 +457,7 @@ while [[ $# -gt 0 ]]; do
         -h | --help) usage ;;
         -a | --all)
             update=1
+            template_standalone_upgrade=1
             release_upgrade=1
             dist_upgrade=1
             update_grub=1
@@ -456,6 +465,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -t | --update ) update=1;;
         -r | --release-upgrade) release_upgrade=1;;
+        -l | --template-standalone-upgrade) template_standalone_upgrade=1;;
         -s | --dist-upgrade ) dist_upgrade=1;;
         -g | --setup-efi-grub ) update_grub=1;;
         -y | --assumeyes ) assumeyes=1;;
@@ -463,6 +473,9 @@ while [[ $# -gt 0 ]]; do
         -u | --usbvm ) usbvm="$2"; shift ;;
         -n | --netvm ) netvm="$2"; shift ;;
         -f | --updatevm ) updatevm="$2"; shift ;;
+        -j | --skip-template-upgrade ) skip_template_upgrade=1;;
+        -k | --skip-standalone-upgrade ) skip_standalone_upgrade=1;;
+        -p | --resync-appmenus-features ) resync_appmenus_features=1;;
     esac
     shift
 done
@@ -481,7 +494,29 @@ updatevm="${updatevm:-sys-firewall}"
 # Run prechecks first
 update_prechecks
 
+# Executing qubes.PostInstall and that's all
+if [ "$resync_appmenus_features" == 1 ]; then
+    if [ "$skip_template_upgrade" != 1 ]; then
+        mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+    fi
+    if [ "$skip_template_upgrade" != 1 ]; then
+        mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+    fi
+    if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
+        mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
+        for vm in ${all_vms[*]};
+        do
+            if ! qvm-run --service "$vm" qubes.PostInstall; then
+                echo "WARNING: Failed to execute qubes.PostInstall in $vm."
+            fi
+        done
+    fi
+    exit 0
+fi
+
 trap 'exit_migration' 0 1 2 3 6 15
+# shellcheck disable=SC1003
+echo 'WARNING: /!\ ENSURE TO HAVE MADE A BACKUP OF ALL YOUR VMs AND dom0 DATA /!\'
 if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     # Backup xen and kernel cmdline
     cat /proc/cmdline > /tmp/kernel_cmdline
@@ -531,15 +566,60 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         qvm-shutdown --wait "$updatevm"
     fi
 
+    if [ "$template_standalone_upgrade" == 1 ]; then
+        echo "---> (STAGE 2) Upgrade templates and standalone VMs to R4.1 repository..."
+        if [ "$skip_template_upgrade" != 1 ]; then
+            mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+        fi
+        if [ "$skip_template_upgrade" != 1 ]; then
+            mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+        fi
+        if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
+            mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
+            for vm in ${all_vms[*]};
+            do
+                if [ "$(qvm-volume info "$vm:root" revisions_to_keep)" == 0 ]; then
+                    echo "WARNING: No snapshot backup history is setup (revisions_to_keep = 0). We cannot revert upgrade in case of any issue."
+                    if [ "$assumeyes" != "1" ] && ! confirm "-> Continue?"; then
+                        exit 1
+                    fi
+                fi
+                qvm-run "$vm" "rm QubesIncoming/dom0/upgrade-template-standalone.sh" || true
+                qvm-copy-to-vm "$vm" "$localdir/scripts/upgrade-template-standalone.sh"
+                qvm-run -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?
+                if [ -n "$exit_code" ]; then
+                    case "$exit_code" in
+                        2) 
+                            echo "ERROR: Unsupported distribution for $vm."
+                            ;;
+                        3) 
+                            echo "ERROR: An error occured during upgrade transaction for $vm."
+                            ;;
+                        *)
+                            echo "ERROR: A general error occured while upgrading $vm (exit code $exit_code)."
+                            ;;
+                    esac
+                    if [ "$assumeyes" != "1" ] && ! confirm "-> Continue?"; then
+                        qvm-shutdown --wait "$vm"
+                        qvm-volume revert "$vm":root
+                        exit 1
+                    fi
+                fi
+            done
+        fi
+        # Shutdown nonessential VMs again if some would have other NetVM than UpdateVM (e.g. sys-whonix)
+        shutdown_nonessential_vms
+    fi
+
     if [ "$release_upgrade" == "1" ]; then
-        echo "---> (STAGE 2) Upgrading 'qubes-release' and 'python?-systemd'..."
+        echo "---> (STAGE 3) Upgrading 'qubes-release' and 'python?-systemd'..."
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --releasever=4.1 qubes-release 'python?-systemd'
         rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-32-primary
     fi
 
     if [ "$dist_upgrade" == "1" ]; then
-        echo "---> (STAGE 3) Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
+        echo "---> (STAGE 4) Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
         # xscreensaver remains unsuable while upgrading
         # it's impossible to unlock it due to PAM update
         echo "INFO: Xscreensaver has been killed. Desktop won't lock before next reboot."
@@ -605,7 +685,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$update_grub" == "1" ]; then
-        echo "---> (STAGE 4) Installing EFI Grub..."
+        echo "---> (STAGE 5) Installing EFI Grub..."
         setup_efi_grub
     fi
     echo "INFO: Please reboot before continuing."
