@@ -688,5 +688,5 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         echo "---> (STAGE 5) Installing EFI Grub..."
         setup_efi_grub
     fi
-    echo "INFO: Please reboot before continuing."
+    echo "INFO: Please ensure to have completed all the stages and reboot before continuing."
 fi
