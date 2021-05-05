@@ -532,7 +532,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     if [ "$double_metadata_size" == 1 ]; then
         if [ -z "$pool_name" ]; then
             echo "---> (STAGE 0) Skipping - no LVM thin pool found"
-        elif [ "$(get_tmeta_size "$pool_name")" -ge "$(recommanded_size "$pool_name")" ]; then
+        elif [ "$(get_tmeta_size "$pool_name")" -ge "$(recommended_size "$pool_name")" ]; then
             echo "---> (STAGE 0) Skipping - already right size"
         else
             echo "---> (STAGE 0) Adjusting LVM thin pool metadata size..."
