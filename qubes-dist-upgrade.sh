@@ -584,6 +584,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                         exit 1
                     fi
                 fi
+                qvm-copy-to-vm "$vm" "$localdir/qubes-hooks.py" || true
                 qvm-run "$vm" "rm QubesIncoming/dom0/upgrade-template-standalone.sh" || true
                 qvm-copy-to-vm "$vm" "$localdir/scripts/upgrade-template-standalone.sh"
                 qvm-run -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?

@@ -21,6 +21,7 @@ if [ -e /etc/fedora-release ]; then
     if [ "$releasever" -lt 32 ]; then
         exit 2
     fi
+    mv /home/user/QubesIncoming/dom0/qubes-hooks.py /usr/lib/python3.8/site-packages/dnf-plugins/
     # Backup R4.0 repository file
     cp /etc/yum.repos.d/qubes-r4.repo /etc/yum.repos.d/qubes-r4.repo.backup
     # We don't have $releasever into so manually replace it
