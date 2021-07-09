@@ -47,7 +47,7 @@ elif [ -e /etc/debian_version ]; then
     apt clean all
     apt update
     # Run upgrade
-    if ! apt upgrade -y; then
+    if ! apt dist-upgrade -y; then
         exit 3
     else
         exit 0
