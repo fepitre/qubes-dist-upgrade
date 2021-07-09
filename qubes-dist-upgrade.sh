@@ -604,7 +604,8 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                 fi
                 qvm-run "$vm" "rm QubesIncoming/dom0/upgrade-template-standalone.sh" || true
                 qvm-copy-to-vm "$vm" "$scriptsdir/upgrade-template-standalone.sh"
-                qvm-run -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?
+                exit_code=
+                qvm-run -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh && rm -f /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?
                 if [ -n "$exit_code" ]; then
                     case "$exit_code" in
                         2) 
