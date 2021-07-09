@@ -7,7 +7,7 @@ if [ "${VERBOSE:-0}" -ge 2 ] || [ "${DEBUG:-0}" -eq 1 ]; then
     set -x
 fi
 
-localdir="$(readlink -f "$(dirname "$0")")"
+scriptsdir=/usr/lib/qubes
 
 #-----------------------------------------------------------------------------#
 
@@ -585,7 +585,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                     fi
                 fi
                 qvm-run "$vm" "rm QubesIncoming/dom0/upgrade-template-standalone.sh" || true
-                qvm-copy-to-vm "$vm" "$localdir/scripts/upgrade-template-standalone.sh"
+                qvm-copy-to-vm "$vm" "$scriptsdir/upgrade-template-standalone.sh"
                 qvm-run -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?
                 if [ -n "$exit_code" ]; then
                     case "$exit_code" in
