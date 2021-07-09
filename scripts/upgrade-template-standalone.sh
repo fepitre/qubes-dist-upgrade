@@ -22,7 +22,7 @@ if [ -e /etc/fedora-release ]; then
         exit 2
     fi
     # Backup R4.0 repository file
-    cp /etc/yum.repos.d/qubes-r4.repo /etc/yum.repos.d/qubes-r4.repo.backup
+    cp /etc/yum.repos.d/qubes-r4.repo /etc/yum.repos.d/qubes-r4.repo.bak
     # We don't have $releasever into so manually replace it
     sed -i 's/r4.0/r4.1/g' /etc/yum.repos.d/qubes-r4.repo
     # Ensure DNF cache is cleaned
@@ -41,7 +41,7 @@ elif [ -e /etc/debian_version ]; then
         exit 2
     fi
     # Backup R4.0 repository file
-    cp /etc/apt/sources.list.d/qubes-r4.list /etc/apt/sources.list.d/qubes-r4.list.backup
+    cp /etc/apt/sources.list.d/qubes-r4.list /etc/apt/sources.list.d/qubes-r4.list.bak
     # We don't have $releasever into so manually replace it
     sed -i 's/r4.0/r4.1/g' /etc/apt/sources.list.d/qubes-r4.list
     # Ensure APT cache is cleaned
