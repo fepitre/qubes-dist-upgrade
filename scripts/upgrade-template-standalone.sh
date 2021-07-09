@@ -31,6 +31,9 @@ if [ -e /etc/fedora-release ]; then
     if ! dnf distro-sync -y --best --allowerasing; then
         exit 3
     fi
+    # Removing xen-qubes-vm pkg disables this service, even though it's still
+    # present in the system (via xen-runtime package now).
+    systemctl preset xendriverdomain
 elif [ -e /etc/debian_version ]; then
     releasever="$(awk -F'.' '{print $1}' /etc/debian_version)"
     # Check Debian supported release

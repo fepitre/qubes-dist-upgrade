@@ -674,6 +674,10 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                 # Fix dbus to dbus-broker change
                 systemctl enable dbus-broker
 
+                # Preset selected other services
+                systemctl preset qubes-qrexec-policy-daemon
+                systemctl preset logrotate systemd-pstore
+
                 # Update legacy Grub if needed
                 update_legacy_grub
             else
