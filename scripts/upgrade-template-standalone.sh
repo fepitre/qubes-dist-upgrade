@@ -47,8 +47,27 @@ elif [ -e /etc/debian_version ]; then
     # Ensure APT cache is cleaned
     apt clean all
     apt update
-    # Run upgrade
-    if ! apt dist-upgrade -y; then
+    # "downgrade" to package without epoch
+    if ! apt install --allow-downgrades -y \
+            'xen-utils-common=4.14*' \
+            'libxenstore3.0=4.14*' \
+            'xenstore-utils=4.14*'; then
+        exit 3
+    fi
+    # restaring qrexec-agent would interrupt the update
+    cat > /usr/sbin/policy-rc.d <<EOF
+#!/bin/sh
+[ "\$1" = "--quiet" ] && shift
+case "\$1" in
+qubes-qrexec-agent.service) exit 101;; # Action forbidden by policy
+*) exit 104;; # Action allowed
+esac
+EOF
+    chmod 755 /usr/sbin/policy-rc.d
+    trap "rm -f /usr/sbin/policy-rc.d" EXIT
+    # Run upgrade, without installing "recommended" packages - that would
+    # un-minimal an minimal template
+    if ! apt dist-upgrade -y --no-install-recommends; then
         exit 3
     fi
 fi
