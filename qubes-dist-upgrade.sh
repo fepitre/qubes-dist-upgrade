@@ -229,7 +229,7 @@ update_legacy_grub() {
         # Regenerate initrd
         # We need to pick latest version before reboot
         # shellcheck disable=SC2012
-        dracut -f --kver "$(ls -1 /lib/modules/ | tail -1)"
+        dracut -f --kver "$(ls -1 /lib/modules/ | sort -V | tail -1)"
     fi
 }
 
@@ -369,7 +369,7 @@ setup_efi_grub() {
 
         # Regenerate initrd
         # shellcheck disable=SC2012
-        dracut -f --kver "$(ls -1 /lib/modules/ | tail -1)"
+        dracut -f --kver "$(ls -1 /lib/modules/ | sort -V | tail -1)"
     fi
 }
 
