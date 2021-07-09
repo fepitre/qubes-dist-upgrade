@@ -1,6 +1,6 @@
 Name:		qubes-dist-upgrade
 Version:	@VERSION@
-Release:	1
+Release:	1%{?dist}
 Summary:	Qubes dom0 dist upgrade
 License:	GPLv2
 BuildArch:	noarch
