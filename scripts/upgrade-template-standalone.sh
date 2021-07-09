@@ -30,8 +30,6 @@ if [ -e /etc/fedora-release ]; then
     # Run upgrade
     if ! dnf distro-sync -y --best --allowerasing; then
         exit 3
-    else
-        exit 0
     fi
 elif [ -e /etc/debian_version ]; then
     releasever="$(awk -F'.' '{print $1}' /etc/debian_version)"
@@ -49,7 +47,5 @@ elif [ -e /etc/debian_version ]; then
     # Run upgrade
     if ! apt dist-upgrade -y; then
         exit 3
-    else
-        exit 0
     fi
 fi
