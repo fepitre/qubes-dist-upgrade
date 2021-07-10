@@ -195,7 +195,7 @@ update_prechecks() {
 default_grub_config() {
 cat > /etc/default/grub << EOF
 GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR="$(sed 's, release .*$,,g' /etc/system-release)"
+GRUB_DISTRIBUTOR="\$(sed 's, release .*$,,g' /etc/system-release)"
 GRUB_DEFAULT=saved
 GRUB_TERMINAL_OUTPUT="gfxterm"
 GRUB_CMDLINE_LINUX="@GRUB_CMDLINE_LINUX@"
