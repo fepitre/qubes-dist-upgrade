@@ -33,6 +33,8 @@ Options:
     --skip-standalone-upgrade       Don't upgrade StandaloneVM to R4.1 repositories.
     --only-update                   Apply STAGE 0, 2 and resync appmenus only to
                                     selected qubes (coma separated list).
+    --max-concurrency               How many TemplateVM/StandaloneVM to update in parallel in STAGE 1
+                                    (default 4).
     
     --resync-appmenus-features      Resync applications and features. To be ran individually
                                     after reboot.
@@ -444,7 +446,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,only-update: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,only-update:,max-concurrency: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -476,6 +478,7 @@ while [[ $# -gt 0 ]]; do
         -n | --netvm ) netvm="$2"; shift ;;
         -f | --updatevm ) updatevm="$2"; shift ;;
         --only-update) only_update="$2"; shift ;;
+        --max-concurrency) max_concurrency="$2"; shift ;;
         -j | --skip-template-upgrade ) skip_template_upgrade=1;;
         -k | --skip-standalone-upgrade ) skip_standalone_upgrade=1;;
         -p | --resync-appmenus-features ) resync_appmenus_features=1;;
@@ -493,6 +496,7 @@ dnf_opts="--clean ${dnf_opts_noclean}"
 usbvm="${usbvm:-sys-usb}"
 netvm="${netvm:-sys-net}"
 updatevm="${updatevm:-sys-firewall}"
+max_concurrency="${max_concurrency:-4}"
 
 # Run prechecks first
 update_prechecks
@@ -565,10 +569,13 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts
         if [ -n "$only_update" ]; then
-            qubesctl --skip-dom0 --targets="${only_update}" state.sls update.qubes-vm
+            qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
+                --targets="${only_update}" state.sls update.qubes-vm
         else
-            qubesctl --skip-dom0 --templates state.sls update.qubes-vm
-            qubesctl --skip-dom0 --standalones state.sls update.qubes-vm
+            qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
+                --templates state.sls update.qubes-vm
+            qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
+                --standalones state.sls update.qubes-vm
         fi
 
         # Shutdown nonessential VMs again if some would have other NetVM than UpdateVM (e.g. sys-whonix)
