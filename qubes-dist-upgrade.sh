@@ -564,10 +564,11 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             exit 1
         fi
 
-        echo "---> (STAGE 1) Updating dom0, Templates VMs and StandaloneVMs..."
+        echo "---> (STAGE 1) Updating dom0..."
         # we need qubes-mgmt-salt-dom0-update >= 4.0.5
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts
+        echo "---> (STAGE 1) Updating Templates VMs and StandaloneVMs..."
         if [ -n "$only_update" ]; then
             qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
                 --targets="${only_update}" state.sls update.qubes-vm
@@ -609,10 +610,10 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                         exit 1
                     fi
                 fi
-                qvm-run "$vm" "rm QubesIncoming/dom0/upgrade-template-standalone.sh" || true
+                qvm-run -q "$vm" "rm QubesIncoming/dom0/upgrade-template-standalone.sh" || true
                 qvm-copy-to-vm "$vm" "$scriptsdir/upgrade-template-standalone.sh"
                 exit_code=
-                qvm-run -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh && rm -f /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?
+                qvm-run -q -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh && rm -f /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?
                 if [ -n "$exit_code" ]; then
                     case "$exit_code" in
                         2) 
