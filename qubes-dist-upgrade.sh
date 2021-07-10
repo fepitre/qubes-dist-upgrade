@@ -521,6 +521,7 @@ if [ "$resync_appmenus_features" == 1 ]; then
             if ! qvm-run --service "$vm" qubes.PostInstall; then
                 echo "WARNING: Failed to execute qubes.PostInstall in $vm."
             fi
+            qvm-shutdown "$vm"
         done
     fi
     exit 0
