@@ -446,7 +446,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,only-update:,max-concurrency: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,only-update:,max-concurrency: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
