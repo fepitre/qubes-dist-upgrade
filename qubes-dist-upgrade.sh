@@ -506,7 +506,7 @@ if [ "$resync_appmenus_features" == 1 ]; then
     if [ "$skip_template_upgrade" != 1 ]; then
         mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done 2>/dev/null)
     fi
-    if [ "$skip_template_upgrade" != 1 ]; then
+    if [ "$skip_standalone_upgrade" != 1 ]; then
         mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done 2>/dev/null)
     fi
     if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
@@ -592,7 +592,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         if [ "$skip_template_upgrade" != 1 ]; then
             mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done 2>/dev/null)
         fi
-        if [ "$skip_template_upgrade" != 1 ]; then
+        if [ "$skip_standalone_upgrade" != 1 ]; then
             mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done 2>/dev/null)
         fi
         if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
