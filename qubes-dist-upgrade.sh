@@ -460,20 +460,20 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -h | --help) usage ;;
         -a | --all)
+            double_metadata_size=1
             update=1
             template_standalone_upgrade=1
             release_upgrade=1
             dist_upgrade=1
             update_grub=1
-            double_metadata_size=1
             ;;
+        -d | --double-metadata-size ) double_metadata_size=1;;
         -t | --update ) update=1;;
-        -r | --release-upgrade) release_upgrade=1;;
         -l | --template-standalone-upgrade) template_standalone_upgrade=1;;
+        -r | --release-upgrade) release_upgrade=1;;
         -s | --dist-upgrade ) dist_upgrade=1;;
         -g | --setup-efi-grub ) update_grub=1;;
         -y | --assumeyes ) assumeyes=1;;
-        -d | --double-metadata-size ) double_metadata_size=1;;
         -u | --usbvm ) usbvm="$2"; shift ;;
         -n | --netvm ) netvm="$2"; shift ;;
         -f | --updatevm ) updatevm="$2"; shift ;;
