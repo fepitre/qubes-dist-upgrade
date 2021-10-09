@@ -416,7 +416,7 @@ set_tmeta_size() {
 }
 
 shutdown_nonessential_vms() {
-    mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name 2>/dev/null)
+    mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name)
     keep_running=( dom0 "$usbvm" "$netvm" "$updatevm")
 
     for vm in "${keep_running[@]}"
@@ -504,10 +504,10 @@ update_prechecks
 # Executing qubes.PostInstall and that's all
 if [ "$resync_appmenus_features" == 1 ]; then
     if [ "$skip_template_upgrade" != 1 ]; then
-        mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+        mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done)
     fi
     if [ "$skip_template_upgrade" != 1 ]; then
-        mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+        mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done)
     fi
     if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
         mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
@@ -590,10 +590,10 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     if [ "$template_standalone_upgrade" == 1 ]; then
         echo "---> (STAGE 2) Upgrade templates and standalone VMs to R4.1 repository..."
         if [ "$skip_template_upgrade" != 1 ]; then
-            mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+            mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done)
         fi
         if [ "$skip_template_upgrade" != 1 ]; then
-            mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done 2>/dev/null)
+            mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done)
         fi
         if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
             mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
