@@ -539,10 +539,12 @@ echo 'WARNING: /!\ ENSURE TO HAVE MADE A BACKUP OF ALL YOUR VMs AND dom0 DATA /!
 if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     # Backup xen and kernel cmdline
     cat /proc/cmdline > /tmp/kernel_cmdline
-    xl info xen_commandline > /tmp/xen_cmdline || {
-        echo "ERROR: Failed to get Xen cmdline, have you restarted the system after previous upgrade stage?"
-        exit 1
-    }
+    if ! [ -f /tmp/xen_cmdline ]; then
+        xl info xen_commandline > /tmp/xen_cmdline || {
+            echo "ERROR: Failed to get Xen cmdline, have you restarted the system after previous upgrade stage?"
+            exit 1
+        }
+    fi
 
     # Shutdown nonessential VMs
     shutdown_nonessential_vms
