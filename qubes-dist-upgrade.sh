@@ -508,10 +508,10 @@ update_prechecks
 # Executing qubes.PostInstall and that's all
 if [ "$resync_appmenus_features" == 1 ]; then
     if [ "$skip_template_upgrade" != 1 ]; then
-        mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done)
+        mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
     fi
     if [ "$skip_standalone_upgrade" != 1 ]; then
-        mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done)
+        mapfile -t standalone_vms < <(qvm-ls --raw-data --fields name,klass | grep 'StandaloneVM$' | cut -d '|' -f 1)
     fi
     if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
         mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
@@ -594,10 +594,10 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     if [ "$template_standalone_upgrade" == 1 ]; then
         echo "---> (STAGE 2) Upgrade templates and standalone VMs to R4.1 repository..."
         if [ "$skip_template_upgrade" != 1 ]; then
-            mapfile -t template_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --template "$vm"; then echo "$vm"; fi; done)
+            mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
         fi
         if [ "$skip_standalone_upgrade" != 1 ]; then
-            mapfile -t standalone_vms < <(for vm in $(qvm-ls --raw-list --fields name); do if qvm-check -q --standalone "$vm"; then echo "$vm"; fi; done)
+            mapfile -t standalone_vms < <(qvm-ls --raw-data --fields name,klass | grep 'StandaloneVM$' | cut -d '|' -f 1)
         fi
         if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
             mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
