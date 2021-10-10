@@ -623,6 +623,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                 qvm-copy-to-vm "$vm" "$scriptsdir/upgrade-template-standalone.sh"
                 exit_code=
                 qvm-run -q -u root -p "$vm" "bash /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh && rm -f /home/user/QubesIncoming/dom0/upgrade-template-standalone.sh" || exit_code=$?
+                qvm-shutdown --wait "$vm"
                 if [ -n "$exit_code" ]; then
                     case "$exit_code" in
                         2) 
@@ -636,7 +637,6 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                             ;;
                     esac
                     if [ "$assumeyes" != "1" ] && ! confirm "-> Continue?"; then
-                        qvm-shutdown --wait "$vm"
                         qvm-volume revert "$vm":root
                         exit 1
                     fi
