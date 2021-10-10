@@ -528,6 +528,8 @@ if [ "$resync_appmenus_features" == 1 ]; then
             qvm-shutdown "$vm"
         done
     fi
+    user=$(groupmems -l -g qubes | cut -f 1 -d ' ')
+    runuser -u "$user" -- qvm-appmenus --all --update
     exit 0
 fi
 
