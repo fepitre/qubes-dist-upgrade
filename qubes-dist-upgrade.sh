@@ -652,6 +652,18 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # shellcheck disable=SC2086
         qubes-dom0-update $dnf_opts --releasever=4.1 qubes-release 'python?-systemd'
         rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-32-primary
+        if ! grep -q fc32 /etc/yum.repos.d/qubes-dom0.repo; then
+            echo "WARNING: /etc/yum.repos.d/qubes-dom0.repo is not updated to R4.1 version"
+            if [ -f /etc/yum.repos.d/qubes-dom0.repo ] && \
+                    grep -q fc32 /etc/yum.repos.d/qubes-dom0.repo.rpmnew; then
+                echo "INFO: Found R4.1 repositories in /etc/yum.repos.d/qubes-dom0.repo.rpmnew"
+                if [ "$assumeyes" == "1" ] || confirm "---> Replace qubes-dom0.repo with qubes-dom0.repo.rpmnew?"; then
+                    mv --backup=simple --suffix=.bak /etc/yum.repos.d/qubes-dom0.repo.rpmnew \
+                                /etc/yum.repos.d/qubes-dom0.repo
+                    echo "INFO: Old /etc/yum.repos.d/qubes-dom0.repo saved with .bak extension"
+                fi
+            fi
+        fi
     fi
 
     if [ "$dist_upgrade" == "1" ]; then
