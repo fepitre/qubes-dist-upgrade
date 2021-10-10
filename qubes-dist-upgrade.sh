@@ -593,6 +593,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
 
         # Restart UpdateVM with updated templates (several fixes)
         qvm-shutdown --wait "$updatevm"
+        qvm-start "$updatevm"
     fi
 
     if [ "$template_standalone_upgrade" == 1 ]; then
