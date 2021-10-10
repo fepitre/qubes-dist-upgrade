@@ -726,6 +726,16 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                 systemctl preset qubes-qrexec-policy-daemon
                 systemctl preset logrotate systemd-pstore
 
+                # this file is created by salt on fresh install if sys-usb is
+                # enabled, do it here on upgrade
+                if systemctl -q is-enabled "qubes-vm@$usbvm.service"; then
+                    mkdir -p "/etc/systemd/system/qubes-vm@$usbvm.service.d"
+                    cat >"/etc/systemd/system/qubes-vm@$usbvm.service.d/50_autostart.conf" <<EOF
+[Unit]
+Before=systemd-user-sessions.service
+EOF
+                fi
+
                 # Update legacy Grub if needed
                 update_legacy_grub
             else
