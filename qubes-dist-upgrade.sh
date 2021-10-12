@@ -595,7 +595,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         shutdown_nonessential_vms
 
         # Restart UpdateVM with updated templates (several fixes)
-        qvm-shutdown --wait "$updatevm"
+        qvm-shutdown --wait --force "$updatevm"
         qvm-start "$updatevm"
     fi
 
