@@ -420,6 +420,9 @@ set_tmeta_size() {
 shutdown_nonessential_vms() {
     mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name)
     keep_running=( dom0 "$usbvm" "$netvm" "$updatevm" "${extra_keep_running[@]}" )
+    # all the updates-proxy targets
+    mapfile -t updates_proxy < <(grep '^\s*[^#].*target=' /etc/qubes-rpc/policy/qubes.UpdatesProxy | cut -d = -f 2)
+    keep_running+=( "${updates_proxy[@]}" )
 
     for vm in "${keep_running[@]}"
     do
