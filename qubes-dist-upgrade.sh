@@ -418,6 +418,11 @@ set_tmeta_size() {
 }
 
 shutdown_nonessential_vms() {
+
+    if ! systemctl is-active -q qubesd.service; then
+        # qubesd not running anymore in later upgrade stages
+        return
+    fi
     mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name)
     keep_running=( dom0 "$usbvm" "$netvm" "$updatevm" "${extra_keep_running[@]}" )
     # all the updates-proxy targets
