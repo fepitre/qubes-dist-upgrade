@@ -642,6 +642,8 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                     case "$exit_code" in
                         2) 
                             echo "ERROR: Unsupported distribution for $vm."
+                            echo "It may still work under R4.1 but it will not get new features, nor important updates (including security fixes)."
+                            echo "Consider switching to supported distribution - see https:///www.qubes-os.org/doc/supported-releases/"
                             ;;
                         3) 
                             echo "ERROR: An error occured during upgrade transaction for $vm."
