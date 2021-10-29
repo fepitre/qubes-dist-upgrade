@@ -73,13 +73,19 @@ exit_migration() {
             fi
             echo "---> Restoring EFI boot manager..."
             # Restore EFI boot manager entry
-            efibootmgr_entry="$(efibootmgr -v | grep "Qubes" | awk '{print $1}')"
-            efibootmgr_entry="${efibootmgr_entry//Boot/}"
-            efibootmgr_entry="${efibootmgr_entry//\*/}"
-            if [ -n "$efibootmgr_entry" ]; then
-                efibootmgr -b "$efibootmgr_entry" -B
+            efibootmgr_entry="$(efibootmgr | awk '/^BootCurrent:/{print $2}')"
+            if [ -z "$efibootmgr_entry" ]; then
+                efibootmgr_entry="$(efibootmgr -v | awk '/Qubes/{print $1;exit}')"
+                efibootmgr_entry="${efibootmgr_entry//Boot/}"
+                efibootmgr_entry="${efibootmgr_entry//\*/}"
             fi
-            efibootmgr -c -d "$(cat /backup/efi_disk)" -L Qubes -l '\EFI\qubes\xen.efi'
+            if [ -n "$efibootmgr_entry" ]; then
+                label="$(efibootmgr | awk "/Boot$efibootmgr_entry/{print \$2}")"
+                efibootmgr -b "$efibootmgr_entry" -B
+                efibootmgr -b "$efibootmgr_entry" -c -d "$(cat /backup/efi_disk)" -L "$label" -l '\EFI\qubes\xen.efi'
+            else
+                efibootmgr -c -d "$(cat /backup/efi_disk)" -L Qubes -l '\EFI\qubes\xen.efi'
+            fi
             # Remove previous default grub conf created
             rm -rf /etc/default/grub
         fi
@@ -346,13 +352,19 @@ setup_efi_grub() {
             fi    
         fi
         # Modifiy EFI boot manager
-        efibootmgr_entry="$(efibootmgr -v | grep "Qubes" | awk '{print $1}')"
-        efibootmgr_entry="${efibootmgr_entry//Boot/}"
-        efibootmgr_entry="${efibootmgr_entry//\*/}"
-        if [ -n "$efibootmgr_entry" ]; then
-            efibootmgr -b "$efibootmgr_entry" -B
+        efibootmgr_entry="$(efibootmgr | awk '/^BootCurrent:/{print $2}')"
+        if [ -z "$efibootmgr_entry" ]; then
+            efibootmgr_entry="$(efibootmgr -v | awk '/Qubes/{print $1;exit}')"
+            efibootmgr_entry="${efibootmgr_entry//Boot/}"
+            efibootmgr_entry="${efibootmgr_entry//\*/}"
         fi
-        efibootmgr -c -d "/dev/${efi_disk}" -L Qubes -l '\EFI\qubes\grubx64.efi'
+        if [ -n "$efibootmgr_entry" ]; then
+            label="$(efibootmgr | awk "/Boot$efibootmgr_entry/{print \$2}")"
+            efibootmgr -b "$efibootmgr_entry" -B
+            efibootmgr -b "$efibootmgr_entry" -c -d "/dev/${efi_disk}" -L "$label" -l '\EFI\qubes\grubx64.efi'
+        else
+            efibootmgr -c -d "/dev/${efi_disk}" -L Qubes -l '\EFI\qubes\grubx64.efi'
+        fi
 
         # Create default Grub config
         default_grub_config
