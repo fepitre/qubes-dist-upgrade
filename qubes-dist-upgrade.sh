@@ -569,6 +569,11 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         fi
     fi
 
+    if [ "$update" = "1" ] && [ "$(rpm -q --qf='%{VERSION}' qubes-release)" = "4.1" ]; then
+        echo "---> (STAGE 1) Updating dom0... already done, skipping"
+        update=
+    fi
+
     if [ "$update" == "1" ]; then
         # Ensure 'gui' and 'qrexec' in default template used
         # for management else 'qubesctl' will failed
