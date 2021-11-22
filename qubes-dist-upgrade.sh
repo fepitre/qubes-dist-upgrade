@@ -607,10 +607,14 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
                 --targets="${only_update}" state.sls update.qubes-vm
         else
-            qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
-                --templates state.sls update.qubes-vm
-            qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
-                --standalones state.sls update.qubes-vm
+            if [ "$skip_template_upgrade" != 1 ]; then
+                qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
+                    --templates state.sls update.qubes-vm
+            fi
+            if [ "$skip_standalone_upgrade" != 1 ]; then
+                qubesctl --skip-dom0 --max-concurrency="$max_concurrency" \
+                    --standalones state.sls update.qubes-vm
+            fi
         fi
 
         # Shutdown nonessential VMs again if some would have other NetVM than UpdateVM (e.g. sys-whonix)
