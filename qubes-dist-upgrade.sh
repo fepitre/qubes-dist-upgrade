@@ -396,6 +396,7 @@ get_thin_pool_name() {
     root_dev=$(df --output=source / | tail -1)
     case "$root_dev" in (/dev/mapper/*) ;; (*) return;; esac
     root_pool=$(lvs --no-headings --separator=/ -o vg_name,pool_lv "$root_dev" | tr -d ' ')
+    case "$root_pool" in (*/) return;; esac
     echo "$root_pool"
 }
 
