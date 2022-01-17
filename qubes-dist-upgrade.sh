@@ -193,11 +193,15 @@ update_prechecks() {
             fi
         fi
     fi
-    # updatevm_template="$(qvm-prefs "$updatevm" template)"
-    # if [ "$updatevm_template" != "fedora-30" ] && [ "$updatevm_template" != "debian-10" ]; then
-    #    echo "ERROR: UpdateVM should be a Fedora 30+ or Debian 10+ template based VM."
-    #    exit 1
-    # fi
+    # don't fail precheck in later stages of upgrade (where qubesd isn't running anymore)
+    if updatevm_template="$(qvm-prefs "$updatevm" template 2>/dev/null)"; then
+        updatevm_template_version=$(sed -ne 's/\(fedora\|debian\)-\([0-9]\+\).*/\2/p' <<<"$updatevm_template")
+        if ! [[ "$updatevm_template" = "fedora-"* && "$updatevm_template_version" -ge 30 ]] &&
+           ! [[ "$updatevm_template" = "debian-"* && "$updatevm_template_version" -ge 11 ]]; then
+           echo "ERROR: UpdateVM ($updatevm) should be at least Fedora 30 or Debian 11 template based VM."
+           exit 1
+        fi
+    fi
 }
 
 default_grub_config() {
