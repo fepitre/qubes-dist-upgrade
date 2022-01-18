@@ -524,7 +524,12 @@ dnf_opts="--clean ${dnf_opts_noclean}"
 # Default values
 usbvm="${usbvm:-sys-usb}"
 netvm="${netvm:-sys-net}"
-updatevm="${updatevm:-sys-firewall}"
+if [ -z "${updatevm-}" ]; then
+    # don't worry if getting updatevm fails - if qubes-prefs doesn't work
+    # anymore, updatevm is useless too (it's used via qubes-dom0-update which
+    # checks for that independently)
+    updatevm=$(qubes-prefs updatevm 2>/dev/null || :)
+fi
 max_concurrency="${max_concurrency:-4}"
 
 # Run prechecks first
