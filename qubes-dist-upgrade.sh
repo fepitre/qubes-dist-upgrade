@@ -574,6 +574,9 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             echo "ERROR: Failed to get Xen cmdline, have you restarted the system after previous upgrade stage?"
             exit 1
         }
+        if ! grep -q gnttab_max_frames /tmp/xen_cmdline; then
+            sed -e 's:$: gnttab_max_frames=2048 gnttab_max_maptrack_frames=4096:' -i /tmp/xen_cmdline
+        fi
     fi
 
     # Shutdown nonessential VMs
