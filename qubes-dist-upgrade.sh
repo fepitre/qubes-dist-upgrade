@@ -48,14 +48,14 @@ exit_migration() {
     local exit_code=$?
     if [ $exit_code -gt 0 ]; then
         echo "-> Launch restoration..."
-        if ! is_qubes_uefi && [ -e /backup/default_grub ]; then
+        if ! is_qubes_uefi && [ "$dist_upgrade" = 1 ] && [ -e /backup/default_grub ]; then
             # In case of any manual modifications
             echo "---> Restoring legacy Grub..."
             mkdir -p /etc/default/
             cp /backup/default_grub /etc/default/grub
             grub2-mkconfig -o /boot/grub2/grub.cfg
         fi
-        if is_qubes_uefi && [ -e /backup/efi_disk ]; then
+        if is_qubes_uefi && [ "$update_grub" = 1 ] && [ -e /backup/efi_disk ]; then
             if [ -e /backup/boot.img ] && [ -e /backup/partitions_table.txt ] && [ -e /backup/fstab ] && [ -e /backup/efi_part ]; then
                 echo "---> Restoring EFI boot partition..."
                 umount /boot/efi || true
