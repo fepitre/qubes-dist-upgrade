@@ -194,11 +194,9 @@ update_prechecks() {
         fi
     fi
     # don't fail precheck in later stages of upgrade (where qubesd isn't running anymore)
-    if updatevm_template="$(qvm-prefs "$updatevm" template 2>/dev/null)"; then
-        updatevm_template_version=$(sed -ne 's/\(fedora\|debian\)-\([0-9]\+\).*/\2/p' <<<"$updatevm_template")
-        if ! [[ "$updatevm_template" = "fedora-"* && "$updatevm_template_version" -ge 30 ]] &&
-           ! [[ "$updatevm_template" = "debian-"* && "$updatevm_template_version" -ge 11 ]]; then
-           echo "ERROR: UpdateVM ($updatevm) should be at least Fedora 30 or Debian 11 template based VM."
+    if qvm-check -q "$updatevm" 2>/dev/null; then
+        if ! qvm-run -q "$updatevm" "command -v dnf"; then
+           echo "ERROR: UpdateVM ($updatevm) should on a template that have 'dnf' installed - at least Fedora 30, Debian 11, or Whonix 16."
            exit 1
         fi
     fi
