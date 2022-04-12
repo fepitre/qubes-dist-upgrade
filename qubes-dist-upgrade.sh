@@ -38,8 +38,11 @@ Options:
     --max-concurrency                  How many TemplateVM/StandaloneVM to update in parallel in STAGE 1
                                        (default 4).
 
-    --resync-appmenus-features         Resync applications and features. To be ran individually
-                                       after reboot.
+    --post-reboot                      Finalize upgrade after rebooting into R4.1. It does:
+                                       - resync applications and features
+                                       - cleanup salt states
+                                       - migrate template info for qvm-template
+    --resync-appmenus-features         Obsolete alias for --post-reboot
 "
     exit 1
 }
@@ -471,7 +474,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,post-reboot,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -508,7 +511,8 @@ while [[ $# -gt 0 ]]; do
         --max-concurrency) max_concurrency="$2"; shift ;;
         -j | --skip-template-upgrade ) skip_template_upgrade=1;;
         -k | --skip-standalone-upgrade ) skip_standalone_upgrade=1;;
-        -p | --resync-appmenus-features ) resync_appmenus_features=1;;
+        --resync-appmenus-features ) post_reboot=1;;
+        -p | --post-reboot ) post_reboot=1;;
     esac
     shift
 done
@@ -533,8 +537,9 @@ max_concurrency="${max_concurrency:-4}"
 # Run prechecks first
 update_prechecks
 
-# Executing qubes.PostInstall and that's all
-if [ "$resync_appmenus_features" == 1 ]; then
+# Executing post upgrade tasks
+if [ "$post_reboot" == 1 ]; then
+    echo "---> (STAGE 6) Synchronizing menu entries and supported features"
     if [ "$skip_template_upgrade" != 1 ]; then
         mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
     fi
