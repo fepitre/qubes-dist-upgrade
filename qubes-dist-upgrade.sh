@@ -573,6 +573,20 @@ if [ "$post_reboot" == 1 ]; then
         echo "Warning: template migration failed"
         echo "install updates and call 'sudo qvm-template migrate-from-rpmdb' manually"
     fi
+
+    echo "---> (STAGE 6) Adjusting default kernel"
+    default_kernel=$(qubes-prefs default-kernel)
+    if [[ "$default_kernel" = "5.4"*"fc25" ]]; then
+        new_kernel=$(rpm -q --qf '%{VERSION}-%{RELEASE}\n'  kernel-qubes-vm | sort -V | tail -1)
+        new_kernel="${new_kernel%.qubes}"
+        if ! [ -e "/var/lib/qubes/vm-kernels/$new_kernel" ]; then
+            echo "ERROR: Kernel $new_kernel installed but /var/lib/qubes/vm-kernels/$new_kernel is missing!"
+            exit 1
+        fi
+        echo "Changing default kernel from $default_kernel to $new_kernel"
+        qubes-prefs default-kernel "$new_kernel"
+    fi
+
     exit 0
 fi
 
