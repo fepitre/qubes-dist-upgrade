@@ -563,6 +563,10 @@ if [ "$post_reboot" == 1 ]; then
     fi
     user=$(groupmems -l -g qubes | cut -f 1 -d ' ')
     runuser -u "$user" -- qvm-appmenus --all --update
+
+    echo "---> (STAGE 6) Cleaning up salt"
+    qubesctl saltutil.clear_cache
+    qubesctl saltutil.sync_all
     exit 0
 fi
 
