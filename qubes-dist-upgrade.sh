@@ -567,6 +567,12 @@ if [ "$post_reboot" == 1 ]; then
     echo "---> (STAGE 6) Cleaning up salt"
     qubesctl saltutil.clear_cache
     qubesctl saltutil.sync_all
+
+    echo "---> (STAGE 6) Migrating templates for qvm-template"
+    if ! qvm-template migrate-from-rpmdb; then
+        echo "Warning: template migration failed"
+        echo "install updates and call 'sudo qvm-template migrate-from-rpmdb' manually"
+    fi
     exit 0
 fi
 
