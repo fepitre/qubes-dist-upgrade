@@ -21,7 +21,11 @@ Options:
     --release-upgrade, -r              (STAGE 2) Update 'qubes-release' for Qubes R4.1.
     --dist-upgrade, -s                 (STAGE 3) Upgrade to Qubes R4.1 and Fedora 32 repositories.
     --template-standalone-upgrade, -l  (STAGE 4) Upgrade templates and standalone VMs to R4.1 repository.
-    --all, -a                          Execute all the above stages in one call.
+    --finalize, -x                     (STAGE 5) Finalize upgrade. It does:
+                                         - resync applications and features
+                                         - cleanup salt states
+    --all-pre-reboot                   Execute stages 1 do 3
+    --all-post-reboot                  Execute stages 4 and 5
 
     --assumeyes, -y                    Automatically answer yes for all questions.
     --usbvm, -u                        Current UsbVM defined (default 'sys-usb').
@@ -35,11 +39,6 @@ Options:
                                        Can be useful if multiple updates proxy VMs are configured.
     --max-concurrency                  How many TemplateVM/StandaloneVM to update in parallel in STAGE 1
                                        (default 4).
-    --post-reboot                      Finalize upgrade after rebooting into R4.2. It does:
-                                       - resync applications and features
-                                       - cleanup salt states
-                                       - migrate template info for qvm-template
-    --resync-appmenus-features         Obsolete alias for --post-reboot
 "
 
     exit 1
@@ -109,7 +108,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,assumeyes,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,post-reboot,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o htrlxsyu:n:f:jkp --long help,all-pre-reboot,all-post-reboot,update,template-standalone-upgrade,release-upgrade,dist-upgrade,assumeyes,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,finalize,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -117,17 +116,20 @@ fi
 eval set -- "$OPTS"
 
 # Common DNF options
-dnf_opts_noclean='--best --allowerasing --enablerepo=*testing*'
+dnf_opts_noclean='--best --allowerasing --enablerepo=qubes-dom0-current-testing'
 extra_keep_running=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h | --help) usage ;;
-        -a | --all)
+        --all-pre-reboot)
             update=1
-            template_standalone_upgrade=1
             release_upgrade=1
             dist_upgrade=1
+            ;;
+        --all-post-reboot)
+            template_standalone_upgrade=1
+            finalize=1
             ;;
         -t | --update ) update=1;;
         -l | --template-standalone-upgrade) template_standalone_upgrade=1;;
@@ -142,8 +144,7 @@ while [[ $# -gt 0 ]]; do
         --max-concurrency) max_concurrency="$2"; shift ;;
         -j | --skip-template-upgrade ) skip_template_upgrade=1;;
         -k | --skip-standalone-upgrade ) skip_standalone_upgrade=1;;
-        --resync-appmenus-features ) post_reboot=1;;
-        -p | --post-reboot ) post_reboot=1;;
+        -x | --finalize ) finalize=1;;
     esac
     shift
 done
@@ -167,55 +168,6 @@ max_concurrency="${max_concurrency:-4}"
 
 # Run prechecks first
 update_prechecks
-
-# Executing post upgrade tasks
-if [ "$post_reboot" == 1 ]; then
-    echo "---> (STAGE 6) Synchronizing menu entries and supported features"
-    if [ "$skip_template_upgrade" != 1 ]; then
-        mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
-    fi
-    if [ "$skip_standalone_upgrade" != 1 ]; then
-        mapfile -t standalone_vms < <(qvm-ls --raw-data --fields name,klass | grep 'StandaloneVM$' | cut -d '|' -f 1)
-    fi
-    if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
-        mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
-    fi
-    if [ -n "$only_update" ]; then
-        IFS=, read -ra all_vms <<<"${only_update}"
-    fi
-    if [ "${#all_vms[*]}" -gt 0 ]; then
-        for vm in ${all_vms[*]};
-        do
-            if ! qvm-run --service "$vm" qubes.PostInstall; then
-                echo "WARNING: Failed to execute qubes.PostInstall in $vm."
-            fi
-            qvm-shutdown "$vm"
-        done
-    fi
-    user=$(groupmems -l -g qubes | cut -f 1 -d ' ')
-    runuser -u "$user" -- qvm-appmenus --all --update
-
-    echo "---> (STAGE 6) Cleaning up salt"
-    qubesctl saltutil.clear_cache
-    qubesctl saltutil.sync_all
-
-    echo "---> (STAGE 6) Adjusting default kernel"
-    default_kernel="$(qubes-prefs default-kernel)"
-    default_kernel_path="/var/lib/qubes/vm-kernels/$default_kernel"
-    default_kernel_package="$(rpm --qf '%{NAME}' -qf "$default_kernel_path")"
-    if [ "$default_kernel_package" = "kernel-qubes-vm" ]; then
-        new_kernel=$(rpm -q --qf '%{VERSION}-%{RELEASE}\n'  kernel-qubes-vm | sort -V | tail -1)
-        new_kernel="${new_kernel%.qubes}"  # TODO: does this work? check with tests
-        if ! [ -e "/var/lib/qubes/vm-kernels/$new_kernel" ]; then
-            echo "ERROR: Kernel $new_kernel installed but /var/lib/qubes/vm-kernels/$new_kernel is missing!"
-            exit 1
-        fi
-        echo "Changing default kernel from $default_kernel to $new_kernel"
-        qubes-prefs default-kernel "$new_kernel"
-    fi
-
-    exit 0
-fi
 
 # shellcheck disable=SC1003
 echo 'WARNING: /!\ MAKE SURE YOU HAVE MADE A BACKUP OF ALL YOUR VMs AND dom0 DATA /!\'
@@ -268,8 +220,9 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$release_upgrade" == "1" ]; then
-        echo "---> (STAGE 3) Upgrading 'qubes-release' and 'python?-systemd'..."
+        echo "---> (STAGE 2) Upgrading 'qubes-release'..."
         # shellcheck disable=SC2086
+        qubes-dom0-update $dnf_opts google-noto-sans-fonts google-noto-serif-fonts
         qubes-dom0-update $dnf_opts --releasever=4.2 qubes-release
         rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-37-primary
         if ! grep -q fc37 /etc/yum.repos.d/qubes-dom0.repo; then
@@ -287,23 +240,15 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$dist_upgrade" == "1" ]; then
-        echo "---> (STAGE 4) Upgrading to QubesOS R4.2 and Fedora 37 repositories..."
+        echo "---> (STAGE 3) Upgrading to QubesOS R4.2 and Fedora 37 repositories..."
         # xscreensaver remains unsuable while upgrading
         # it's impossible to unlock it due to PAM update
         echo "INFO: Xscreensaver has been killed. Desktop won't lock before next reboot."
         pkill xscreensaver || true
 
-        # Install Audio and Gui daemons
-        # it should be pulled by distro-sync
-        # but better to ensure that
-        packages="qubes-audio-daemon qubes-gui-daemon qubes-artwork-plymouth"
-
-        # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts --downloadonly $packages
-
         # Don't clean cache of previous transaction for the requested packages.
         # shellcheck disable=SC2086
-        qubes-dom0-update ${dnf_opts_noclean} --downloadonly --action=distro-sync || exit_code=$?
+        qubes-dom0-update ${dnf_opts_noclean} --downloadonly --force-xen-upgrade --action=distro-sync || exit_code=$?
         if [ -z "$exit_code" ] || [ "$exit_code" == 100 ]; then
             if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all VM?"; then
                 qvm-shutdown --wait --all
@@ -315,51 +260,17 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                     dnf distro-sync --exclude="kernel-$(uname -r)" --best --allowerasing
                 fi
 
-                # install requested packages
-                for pkg in $packages
-                do
-                    pkg_rpm="$(ls /var/lib/qubes/updates/rpm/$pkg*.rpm)"
-                    if [ -e "$pkg_rpm" ]; then
-                        packages_rpm="$packages_rpm $pkg_rpm"
-                    fi
-                done
-
-                if [ -n "$packages_rpm" ]; then
-                    # shellcheck disable=SC2086
-                    if [ "$assumeyes" == 1 ]; then
-                        dnf install -y --best --allowerasing $packages_rpm
-                    else
-                        dnf install --best --allowerasing $packages_rpm
-                    fi
-                fi
-
-                # Fix dbus to dbus-broker change
-                systemctl enable dbus-broker
-
-                # Preset selected other services
-                systemctl preset qubes-qrexec-policy-daemon
-                systemctl preset logrotate systemd-pstore
-
-                # this file is created by salt on fresh install if sys-usb is
-                # enabled, do it here on upgrade
-                if systemctl -q is-enabled "qubes-vm@$usbvm.service"; then
-                    mkdir -p "/etc/systemd/system/qubes-vm@$usbvm.service.d"
-                    cat >"/etc/systemd/system/qubes-vm@$usbvm.service.d/50_autostart.conf" <<EOF
-[Unit]
-Before=systemd-user-sessions.service
-EOF
-                fi
-
             else
                 echo "WARNING: dist-upgrade stage canceled."
             fi
         else
             false
         fi
+        echo "INFO: Please ensure you have completed stages 1, 2 and 3 and reboot before continuing."
     fi
 
     if [ "$template_standalone_upgrade" == 1 ]; then
-        echo "---> (STAGE 2) Upgrade templates and standalone VMs to R4.1 repository..."
+        echo "---> (STAGE 4) Upgrade templates and standalone VMs to R4.1 repository..."
         if [ "$skip_template_upgrade" != 1 ]; then
             mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
         fi
@@ -402,6 +313,7 @@ EOF
                             ;;
                     esac
                     if [ "$assumeyes" != "1" ] && ! confirm "-> Continue?"; then
+                        echo "REVERTING template to pre-ugrade state"
                         qvm-volume revert "$vm":root
                         exit 1
                     fi
@@ -412,5 +324,53 @@ EOF
         shutdown_nonessential_vms
     fi
 
-    echo "INFO: Please ensure you have completed all the stages and reboot before continuing."
+    # Executing post upgrade tasks
+  if [ "$finalize" == 1 ]; then
+      echo "---> (STAGE 5) Synchronizing menu entries and supported features"
+      if [ "$skip_template_upgrade" != 1 ]; then
+          mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
+      fi
+      if [ "$skip_standalone_upgrade" != 1 ]; then
+          mapfile -t standalone_vms < <(qvm-ls --raw-data --fields name,klass | grep 'StandaloneVM$' | cut -d '|' -f 1)
+      fi
+      if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
+          mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
+      fi
+      if [ -n "$only_update" ]; then
+          IFS=, read -ra all_vms <<<"${only_update}"
+      fi
+      if [ "${#all_vms[*]}" -gt 0 ]; then
+          for vm in ${all_vms[*]};
+          do
+              if ! qvm-run --service "$vm" qubes.PostInstall; then
+                  echo "WARNING: Failed to execute qubes.PostInstall in $vm."
+              fi
+              qvm-shutdown "$vm"
+          done
+      fi
+      user=$(groupmems -l -g qubes | cut -f 1 -d ' ')
+      runuser -u "$user" -- qvm-appmenus --all --update
+
+      echo "---> (STAGE 5) Cleaning up salt"
+      echo "Error on ext_pillar interface qvm_prefs is expected"
+      qubesctl saltutil.clear_cache
+      qubesctl saltutil.sync_all
+
+      echo "---> (STAGE 5) Adjusting default kernel"
+      default_kernel="$(qubes-prefs default-kernel)"
+      default_kernel_path="/var/lib/qubes/vm-kernels/$default_kernel"
+      default_kernel_package="$(rpm --qf '%{NAME}' -qf "$default_kernel_path")"
+      if [ "$default_kernel_package" = "kernel-qubes-vm" ]; then
+          new_kernel=$(rpm -q --qf '%{VERSION}-%{RELEASE}\n'  kernel-qubes-vm | sort -V | tail -1)
+          new_kernel="${new_kernel%.qubes}"  # TODO: does this work? check with tests
+          if ! [ -e "/var/lib/qubes/vm-kernels/$new_kernel" ]; then
+              echo "ERROR: Kernel $new_kernel installed but /var/lib/qubes/vm-kernels/$new_kernel is missing!"
+              exit 1
+          fi
+          echo "Changing default kernel from $default_kernel to $new_kernel"
+          qubes-prefs default-kernel "$new_kernel"
+      fi
+
+      exit 0
+  fi
 fi

@@ -31,6 +31,8 @@ if [ -e /etc/fedora-release ]; then
     if ! dnf distro-sync -y --best --allowerasing; then
         exit 3
     fi
+    dnf swap -y --allowerasing pulseaudio pipewire-pulseaudio
+
 elif [ -e /etc/debian_version ]; then
     releasever="$(awk -F'.' '{print $1}' /etc/debian_version)"
     # Check Debian supported release
@@ -41,8 +43,8 @@ elif [ -e /etc/debian_version ]; then
     cp /etc/apt/sources.list.d/qubes-r4.list /etc/apt/sources.list.d/qubes-r4.list.bak
     # We don't have $releasever into so manually replace it
     sed -i 's/r4.1/r4.2/g' /etc/apt/sources.list.d/qubes-r4.list
-    sed -i 's/arch=amd64/arch=amd64\ signed-by=\/usr\/share\/keyrings\/apt-qubes-archive-keyring.gpg/g' /etc/apt/sources.list.d/qubes-r4.list
-
+    sed -i 's/arch=amd64/arch=amd64\ signed-by=\/usr\/share\/keyrings\/qubes-archive-keyring-4.2.gpg/g' /etc/apt/sources.list.d/qubes-r4.list
+    export DEBIAN_FRONTEND=noninteractive
     # Ensure APT cache is cleaned
     apt-get clean
     apt-get update
@@ -60,7 +62,7 @@ EOF
     trap "rm -f /usr/sbin/policy-rc.d" EXIT
     # Run upgrade, without installing "recommended" packages - that would
     # un-minimal an minimal template
-    if ! apt dist-upgrade -y --no-install-recommends; then
+    if ! apt-get dist-upgrade -y --no-install-recommends; then
         exit 3
     fi
 fi
