@@ -366,7 +366,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
       default_kernel_package="$(rpm --qf '%{NAME}' -qf "$default_kernel_path")"
       if [ "$default_kernel_package" = "kernel-qubes-vm" ]; then
           new_kernel=$(rpm -q --qf '%{VERSION}-%{RELEASE}\n'  kernel-qubes-vm | sort -V | tail -1)
-          new_kernel="${new_kernel%.qubes}"  # TODO: does this work? check with tests
+          new_kernel="${new_kernel/.qubes/}"
           if ! [ -e "/var/lib/qubes/vm-kernels/$new_kernel" ]; then
               echo "ERROR: Kernel $new_kernel installed but /var/lib/qubes/vm-kernels/$new_kernel is missing!"
               exit 1
