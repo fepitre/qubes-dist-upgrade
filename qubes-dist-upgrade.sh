@@ -76,10 +76,14 @@ shutdown_nonessential_vms() {
     mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name)
     keep_running=( dom0 "$usbvm" "$netvm" "$updatevm" "${extra_keep_running[@]}" )
     # all the updates-proxy targets
-    mapfile -t updates_proxy < <(grep '^\s*[^#].*target=' /etc/qubes-rpc/policy/qubes.UpdatesProxy | cut -d = -f 2)
-    keep_running+=( "${updates_proxy[@]}" )
-    mapfile -t updates_proxy_new < <(grep qubes.UpdatesProxy /etc/qubes/policy.d/*policy | grep '^\s*[^#].*target=' /etc/qubes-rpc/policy/qubes.UpdatesProxy | cut -d = -f 2)
-    keep_running+=( "${updates_proxy_new[@]}" )
+    if [ -e "/etc/qubes-rpc/policy/qubes.UpdatesProxy" ]; then
+        mapfile -t updates_proxy < <(grep '^\s*[^#].*target=' /etc/qubes-rpc/policy/qubes.UpdatesProxy | cut -d = -f 2)
+        keep_running+=( "${updates_proxy[@]}" )
+    fi
+    if [ -e "/etc/qubes-rpc/policy/qubes.UpdatesProxy" ]; then
+      mapfile -t updates_proxy_new < <(grep qubes.UpdatesProxy /etc/qubes/policy.d/*policy | grep '^\s*[^#].*target=' | cut -d = -f 2)
+      keep_running+=( "${updates_proxy_new[@]}" )
+    fi
 
     for vm in "${keep_running[@]}"
     do
