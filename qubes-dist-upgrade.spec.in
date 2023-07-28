@@ -1,6 +1,6 @@
 Name:		qubes-dist-upgrade
 Version:	@VERSION@
-Release:	1
+Release:	1%{?dist}
 Summary:	Qubes dom0 dist upgrade
 License:	GPLv2
 BuildArch:	noarch
@@ -14,13 +14,15 @@ Source0:	%{name}-%{version}.tar.gz
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -D -m 755 qubes-dist-upgrade.sh $RPM_BUILD_ROOT/usr/lib/qubes/qubes-dist-upgrade.sh
+install -D -m 755 qubes-dist-upgrade.sh $RPM_BUILD_ROOT/usr/sbin/qubes-dist-upgrade
+install -D -m 755 scripts/upgrade-template-standalone.sh $RPM_BUILD_ROOT/usr/lib/qubes/upgrade-template-standalone.sh
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
-/usr/lib/qubes/qubes-dist-upgrade.sh
+/usr/sbin/qubes-dist-upgrade
+/usr/lib/qubes/upgrade-template-standalone.sh
 
 %changelog
 @CHANGELOG@
