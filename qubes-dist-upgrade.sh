@@ -105,6 +105,25 @@ shutdown_nonessential_vms() {
     fi
 }
 
+
+get_root_volume_name() {
+    local root_dev root_volume
+    root_dev=$(df --output=source / | tail -1)
+    case "$root_dev" in (/dev/mapper/*) ;; (*) return;; esac
+    root_volume=$(lvs --no-headings --separator=/ -o vg_name,lv_name "$root_dev" | tr -d ' ')
+    case "$root_volume" in (*/) return;; esac
+    echo "$root_volume"
+}
+
+get_root_group_name() {
+    local root_dev root_volume
+    root_dev=$(df --output=source / | tail -1)
+    case "$root_dev" in (/dev/mapper/*) ;; (*) return;; esac
+    root_group=$(lvs --no-headings -o vg_name "$root_dev" | tr -d ' ')
+    echo "$root_group"
+}
+
+
 #-----------------------------------------------------------------------------#
 
 if [[ $EUID -ne 0 ]]; then
@@ -185,6 +204,18 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$update" == "1" ]; then
+      root_vol_name=$(get_root_volume_name)
+      root_group_name=$(get_root_group_name)
+      if [ -z "$root_vol_name" ]; then
+        echo "---> (STAGE 1) Skipping dom0 snapshot - no LVM volume found"
+      elif lvs "$root_group_name/Qubes41UpgradeBackup" > /dev/null 2>&1 ; then
+        echo "---> (STAGE 1) Skipping dom0 snapshot - snapshot already exists. If you want to make a snapshot anyway, remove the existing one using lvremove $root_group_name/Qubes41UpgradeBackup"
+      elif [ "$assumeyes" == "1" ] || confirm "---> (STAGE 1) Do you want to make a dom0 snapshot?"; then
+        # make a dom0 snapshot
+        lvcreate -n Qubes41UpgradeBackup -s "$root_vol_name"
+        echo "--> If upgrade to 4.2 fails, you can restore your dom0 snapshot after booting from a bootable device and using sudo lvconvert --merge $root_group_name/Qubes41UpgradeBackup. Reboot after restoration."
+      fi
+
         # Ensure 'gui' and 'qrexec' in default template used
         # for management else 'qubesctl' will failed
         management_template="$(qvm-prefs "$(qubes-prefs management_dispvm)" template)"
@@ -375,6 +406,12 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
           qubes-prefs default-kernel "$new_kernel"
       fi
 
+      root_vol_name=$(get_root_volume_name)
+      if [ "$root_vol_name" ]; then
+        root_group_name=$(get_root_group_name)
+        lvremove "$root_group_name/Qubes41UpgradeBackup"
+
+      fi
       exit 0
   fi
 fi
