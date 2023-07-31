@@ -47,7 +47,7 @@ elif [ -e /etc/debian_version ]; then
     export DEBIAN_FRONTEND=noninteractive
     # Ensure APT cache is cleaned
     apt-get clean
-    apt-get update
+    apt-get update -o Dpkg::Options::="--force-confdef"
 
     # restaring qrexec-agent would interrupt the update
     cat > /usr/sbin/policy-rc.d <<EOF
@@ -62,7 +62,7 @@ EOF
     trap "rm -f /usr/sbin/policy-rc.d" EXIT
     # Run upgrade, without installing "recommended" packages - that would
     # un-minimal an minimal template
-    if ! apt-get dist-upgrade -y --no-install-recommends; then
+    if ! apt-get dist-upgrade -y --no-install-recommends -o Dpkg::Options::="--force-confdef"; then
         exit 3
     fi
 fi
