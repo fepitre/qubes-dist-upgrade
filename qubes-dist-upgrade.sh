@@ -80,8 +80,8 @@ shutdown_nonessential_vms() {
         mapfile -t updates_proxy < <(grep '^\s*[^#].*target=' /etc/qubes-rpc/policy/qubes.UpdatesProxy | cut -d = -f 2)
         keep_running+=( "${updates_proxy[@]}" )
     fi
-    if [ -e "/etc/qubes-rpc/policy/qubes.UpdatesProxy" ]; then
-      mapfile -t updates_proxy_new < <(grep qubes.UpdatesProxy /etc/qubes/policy.d/*policy | grep '^\s*[^#].*target=' | cut -d = -f 2)
+    if [ -e "/etc/qubes/policy.d" ]; then
+      mapfile -t updates_proxy_new < <(grep qubes.UpdatesProxy /etc/qubes/policy.d/*.policy | grep '^\s*[^#].*target=' | cut -d = -f 2)
       keep_running+=( "${updates_proxy_new[@]}" )
     fi
 
@@ -213,7 +213,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
       elif [ "$assumeyes" == "1" ] || confirm "---> (STAGE 1) Do you want to make a dom0 snapshot?"; then
         # make a dom0 snapshot
         lvcreate -n Qubes41UpgradeBackup -s "$root_vol_name"
-        echo "--> If upgrade to 4.2 fails, you can restore your dom0 snapshot after booting from a bootable device and using sudo lvconvert --merge $root_group_name/Qubes41UpgradeBackup. Reboot after restoration."
+        echo "--> If upgrade to 4.2 fails, you can restore your dom0 snapshot with sudo lvconvert --merge $root_group_name/Qubes41UpgradeBackup. Reboot after restoration."
       fi
 
         # Ensure 'gui' and 'qrexec' in default template used
@@ -409,8 +409,11 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
       root_vol_name=$(get_root_volume_name)
       if [ "$root_vol_name" ]; then
         root_group_name=$(get_root_group_name)
-        lvremove "$root_group_name/Qubes41UpgradeBackup"
-
+        if [ "$assumeyes" == "1" ]; then
+          lvremove -f "$root_group_name/Qubes41UpgradeBackup"
+        else
+          lvremove "$root_group_name/Qubes41UpgradeBackup"
+        fi
       fi
       exit 0
   fi
