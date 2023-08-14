@@ -17,83 +17,31 @@ echo "Usage: $0 [OPTIONS]...
 This script is used for updating current QubesOS R4.0 to R4.1.
 
 Options:
-    --double-metadata-size, -d         (STAGE 0) Double current LVM thin pool metadata size.
     --update, -t                       (STAGE 1) Update of dom0, TemplatesVM and StandaloneVM.
-    --template-standalone-upgrade, -l  (STAGE 2) Upgrade templates and standalone VMs to R4.1 repository.
-    --release-upgrade, -r              (STAGE 3) Update 'qubes-release' for Qubes R4.1.
-    --dist-upgrade, -s                 (STAGE 4) Upgrade to Qubes R4.1 and Fedora 32 repositories.
-    --setup-efi-grub, -g               (STAGE 5) Setup EFI Grub.
-    --all, -a                          Execute all the above stages in one call.
+    --release-upgrade, -r              (STAGE 2) Update 'qubes-release' for Qubes R4.1.
+    --dist-upgrade, -s                 (STAGE 3) Upgrade to Qubes R4.1 and Fedora 32 repositories.
+    --template-standalone-upgrade, -l  (STAGE 4) Upgrade templates and standalone VMs to R4.1 repository.
+    --finalize, -x                     (STAGE 5) Finalize upgrade. It does:
+                                         - resync applications and features
+                                         - cleanup salt states
+    --all-pre-reboot                   Execute stages 1 do 3
+    --all-post-reboot                  Execute stages 4 and 5
 
     --assumeyes, -y                    Automatically answer yes for all questions.
     --usbvm, -u                        Current UsbVM defined (default 'sys-usb').
     --netvm, -n                        Current NetVM defined (default 'sys-net').
     --updatevm, -f                     Current UpdateVM defined (default 'sys-firewall').
-    --skip-template-upgrade, -j        Don't upgrade TemplateVM to R4.1 repositories.
-    --skip-standalone-upgrade, -k      Don't upgrade StandaloneVM to R4.1 repositories.
-    --only-update                      Apply STAGE 0, 2 and resync appmenus only to
-                                       selected qubes (coma separated list).
-    --keep-running                     List of extra VMs to keep running during update (coma separated list).
+    --skip-template-upgrade, -j        Don't upgrade TemplateVM to R4.2 repositories.
+    --skip-standalone-upgrade, -k      Don't upgrade StandaloneVM to R4.2 repositories.
+    --only-update                      Apply STAGE 4 and resync appmenus only to
+                                       selected qubes (comma separated list).
+    --keep-running                     List of extra VMs to keep running during update (comma separated list).
                                        Can be useful if multiple updates proxy VMs are configured.
     --max-concurrency                  How many TemplateVM/StandaloneVM to update in parallel in STAGE 1
                                        (default 4).
-
-    --post-reboot                      Finalize upgrade after rebooting into R4.1. It does:
-                                       - resync applications and features
-                                       - cleanup salt states
-                                       - migrate template info for qvm-template
-    --resync-appmenus-features         Obsolete alias for --post-reboot
 "
-    exit 1
-}
 
-exit_migration() {
-    local exit_code=$?
-    if [ $exit_code -gt 0 ]; then
-        echo "-> Launch restoration..."
-        if ! is_qubes_uefi && [ "$dist_upgrade" = 1 ] && [ -e /backup/default_grub ]; then
-            # In case of any manual modifications
-            echo "---> Restoring legacy Grub..."
-            mkdir -p /etc/default/
-            cp /backup/default_grub /etc/default/grub
-            grub2-mkconfig -o /boot/grub2/grub.cfg
-        fi
-        if is_qubes_uefi && [ "$update_grub" = 1 ] && [ -e /backup/efi_disk ]; then
-            if [ -e /backup/boot.img ] && [ -e /backup/partitions_table.txt ] && [ -e /backup/fstab ] && [ -e /backup/efi_part ]; then
-                echo "---> Restoring EFI boot partition..."
-                umount /boot/efi || true
-                umount /boot || true
-                # Restore partition table
-                sfdisk --no-reread -f "$(cat /backup/efi_disk)" < /backup/partitions_table.txt
-                # Resync partition
-                partprobe
-                # Restore boot partition
-                dd if=/backup/boot.img of="$(cat /backup/efi_part)"
-                # Remount previous EFI part
-                cp /backup/fstab /etc/fstab
-                mkdir -p /boot/efi
-                mount /boot/efi
-            fi
-            echo "---> Restoring EFI boot manager..."
-            # Restore EFI boot manager entry
-            efibootmgr_entry="$(efibootmgr | awk '/^BootCurrent:/{print $2}')"
-            if [ -z "$efibootmgr_entry" ]; then
-                efibootmgr_entry="$(efibootmgr -v | awk '/Qubes/{print $1;exit}')"
-                efibootmgr_entry="${efibootmgr_entry//Boot/}"
-                efibootmgr_entry="${efibootmgr_entry//\*/}"
-            fi
-            if [ -n "$efibootmgr_entry" ]; then
-                label="$(efibootmgr | awk "/Boot$efibootmgr_entry/{print \$2}")"
-                efibootmgr -b "$efibootmgr_entry" -B
-                efibootmgr -b "$efibootmgr_entry" -c -d "$(cat /backup/efi_disk)" -L "$label" -l '\EFI\qubes\xen.efi'
-            else
-                efibootmgr -c -d "$(cat /backup/efi_disk)" -L Qubes -l '\EFI\qubes\xen.efi'
-            fi
-            # Remove previous default grub conf created
-            rm -rf /etc/default/grub
-        fi
-    fi
-    exit "$exit_code"
+    exit 1
 }
 
 confirm() {
@@ -108,95 +56,8 @@ confirm() {
     esac
 }
 
-get_reference_from_fstab() {
-    local mountpoint="$1"
-    if [ -n "$mountpoint" ]; then
-        sed '/^[[:blank:]]*#/d' /etc/fstab | grep -Po "^[^ \t]+[ \t]+${mountpoint}[ \t]+" | awk '{print $1}'
-    fi
-}
-
-is_boot_partition_exists() {
-    boot="$(get_reference_from_fstab /boot)"
-    test -n "$boot"
-}
-
-is_qubes_uefi() {
-    boot_efi="$(get_reference_from_fstab /boot/efi)"
-    test -n "$boot_efi"
-}
-
-get_uuid_from_mountpoint() {
-    reference="$(get_reference_from_fstab "$1")"
-    if [ "${reference/UUID=}" != "$reference" ]; then
-        echo "${reference/UUID=}"
-    else
-        get_uuid_from_block "$reference"
-    fi
-}
-
-get_uuid_from_block() {
-    local blockpoint="$1"
-    if [ -n "$blockpoint" ]; then
-        lsblk -no uuid "$blockpoint"
-    fi
-}
-
-get_disk_from_uuid() {
-    local uuid="$1"
-    if [ -n "$uuid" ]; then
-        lsblk -no pkname "/dev/disk/by-uuid/$uuid"
-    fi
-}
-
-get_partnumber_from_uuid() {
-    local uuid="$1"
-    if [ -n "$uuid" ]; then
-        disk="$(get_disk_from_uuid "$uuid")"
-        partnumber="$(lsblk -no name "/dev/disk/by-uuid/$uuid")"
-        partnumber="${partnumber//$disk/}"
-        # possibly with prefix 'p'
-        echo "$partnumber"
-    fi
-}
-
-get_available_partnumber() {
-    local disk="$1"
-    if [ -b "$disk" ]; then
-        partitions_list="$(fdisk -l "$disk" | grep "^$disk" | awk -v disk="$disk" '{ gsub(disk,"",$1); print $1 }')"
-        last_partnumber="$(echo "$partitions_list" | tail -1)"
-        last_partnumber="${last_partnumber//p/}"
-        if [ -n "$last_partnumber" ]; then
-            echo "$((last_partnumber + 1))"
-        fi
-    fi
-}
-
-get_boot_efi_size(){
-    local uuid
-    efi_uuid="$(get_uuid_from_mountpoint /boot/efi)"
-    if [ -n "$efi_uuid" ]; then
-        lsblk -b -no size "/dev/disk/by-uuid/$efi_uuid"
-    fi
-}
 
 update_prechecks() {
-    if ! is_boot_partition_exists; then
-        if is_qubes_uefi; then
-            efi_uuid="$(get_uuid_from_mountpoint /boot/efi)"
-            if [ -n "$efi_uuid" ]; then
-                # Minimum size for boot partition: 500Mo
-                min_efi_size=524288000
-                efi_boot_size="$(get_boot_efi_size)"
-                if [ "${efi_boot_size:-0}" -lt "$min_efi_size" ]; then
-                    echo "WARNING: EFI boot partitition size is less than 500Mo."
-                fi
-            else
-                echo "ERROR: Cannot find EFI boot partitition UUID."
-                exit 1
-            fi
-        fi
-    fi
-    # don't fail precheck in later stages of upgrade (where qubesd isn't running anymore)
     if qvm-check -q "$updatevm" 2>/dev/null; then
         if ! qvm-run -q "$updatevm" "command -v dnf"; then
            echo "ERROR: UpdateVM ($updatevm) should on a template that have 'dnf' installed - at least Fedora 30, Debian 11, or Whonix 16."
@@ -205,235 +66,6 @@ update_prechecks() {
     fi
 }
 
-default_grub_config() {
-cat > /etc/default/grub << EOF
-GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR="\$(sed 's, release .*$,,g' /etc/system-release)"
-GRUB_DEFAULT=saved
-GRUB_TERMINAL_OUTPUT="gfxterm"
-GRUB_CMDLINE_LINUX="@GRUB_CMDLINE_LINUX@"
-GRUB_CMDLINE_XEN_DEFAULT="@GRUB_CMDLINE_XEN_DEFAULT@"
-GRUB_DISABLE_RECOVERY="true"
-GRUB_THEME="/boot/grub2/themes/qubes/theme.txt"
-GRUB_DISABLE_OS_PROBER="true"
-EOF
-}
-
-update_default_grub_config() {
-    # Use current default options
-    sed -i "s|@GRUB_CMDLINE_LINUX@|$(cat /tmp/kernel_cmdline)|g" /etc/default/grub
-    sed -i "s|@GRUB_CMDLINE_XEN_DEFAULT@|$(cat /tmp/xen_cmdline)|g" /etc/default/grub
-    sed -i '/^GRUB_DISABLE_SUBMENU=.*/d' /etc/default/grub
-    sed -i 's|^GRUB_THEME=.*|GRUB_THEME="/boot/grub2/themes/qubes/theme.txt"|g' /etc/default/grub
-}
-
-update_legacy_grub() {
-    if ! is_qubes_uefi; then
-        if [ -e /etc/default/grub ]; then
-            echo "---> Updating Grub..."
-            mkdir -p /backup
-            if [ -e /backup/default_grub ]; then
-                mv /backup/default_grub "/backup/default_grub-$(date +%s)"
-            fi
-            cp /etc/default/grub /backup/default_grub
-            update_default_grub_config
-            grub2-mkconfig -o /boot/grub2/grub.cfg
-        fi
-
-        # Set default plymouth theme
-        plymouth-set-default-theme qubes-dark
-
-        # Regenerate initrd
-        # We need to pick latest version before reboot
-        # shellcheck disable=SC2012
-        dracut -f --kver "$(ls -1 /lib/modules/ | sort -V | tail -1)"
-    fi
-}
-
-setup_efi_grub() {
-    # backup current /boot including efi
-    if [ ! -d /backup/boot ]; then
-        mkdir -p /backup/
-        cp -ar /boot /backup/
-        if [ -d /backup/boot/efi ]; then
-            mv /backup/boot/efi /backup/
-        fi
-    else
-        echo "INFO: Boot backup folder already exists at /backup. Skipping."
-    fi
-
-    # backup current fstab
-    if [ ! -e /backup/fstab ]; then
-        cp /etc/fstab /backup/fstab
-    else
-        echo "INFO: fstab backup already exists at /backup. Skipping."
-    fi
-
-    if is_qubes_uefi; then
-        umount /boot/efi || true
-        efi_uuid="$(get_uuid_from_mountpoint /boot/efi)"
-        efi_part_number="$(get_partnumber_from_uuid "$efi_uuid")"
-        efi_disk="$(get_disk_from_uuid "$efi_uuid")"
-        if [ -z "${efi_part_number}" ] || [ ! -b "/dev/${efi_disk}" ]; then
-            echo "ERROR: Cannot find EFI part number and disk."
-            exit 1
-        fi
-        echo "/dev/${efi_disk}" > /backup/efi_disk
-        if ! is_boot_partition_exists; then
-            available_partnumber="$(get_available_partnumber "/dev/${efi_disk}")"
-            if [ -z "${available_partnumber}" ]; then
-                echo "ERROR: Cannot find available partition number."
-                exit 1
-            fi
-            if [ "${efi_part_number:0:1}" == "p" ]; then
-                part_path="/dev/${efi_disk}p"
-            else
-                part_path="/dev/${efi_disk}"
-            fi
-            # We extracted disk path of partition. Keep only number
-            efi_part_number="${efi_part_number//p/}"
-            # Backup
-            if [ ! -e /backup/boot.img ] && [ ! -e /boot/partitions_table.txt ]; then
-                dd if="${part_path}${efi_part_number}" of="/backup/boot.img"
-                sfdisk -d "/dev/${efi_disk}" > "/backup/partitions_table.txt"
-                echo "${part_path}${efi_part_number}" > /backup/efi_part
-            else
-                echo "INFO: Boot and partitions table backup already exists at /backup. Skipping."
-            fi
-
-            # Get EFI FS partition type for distinguishing Apple case
-            efi_part_fstype="$(lsblk -no fstype "${part_path}${efi_part_number}")"
-
-            # Recreate EFI partition at the same position
-            # Create Boot partition at third position
-            printf "d\n%s\nn\n%s\n\n+25M\nn\n%s\n\n\nt\n%s\n1\nw\n" "${efi_part_number}" "${efi_part_number}" "${available_partnumber}" "${efi_part_number}" | fdisk --wipe-partition always "/dev/$efi_disk"
-
-            # Check new boot partition has been created
-            newavailable_partnumber="$(get_available_partnumber "/dev/${efi_disk}")"
-            if [ "$newavailable_partnumber" == "$available_partnumber" ] || [ ! -b "${part_path}${available_partnumber}" ]; then
-                echo "ERROR: An error occured while creating boot partition"
-                exit 1
-            fi
-
-            # Set new partition EFI boot with the same UUID as previous
-            if [ "${efi_part_fstype}" == "hfsplus" ]; then
-                mkfs.hfsplus -U "$efi_uuid" "${part_path}${efi_part_number}"
-            else
-                volid=${efi_uuid/-/}
-                mkfs.vfat -i "$volid" "${part_path}${efi_part_number}"
-            fi
-            # Boot partition
-            mkfs.ext4 "${part_path}${available_partnumber}"
-
-            # shellcheck disable=SC2115
-            rm -rf /boot/*
-            mount "${part_path}${available_partnumber}" /boot
-            
-            mkdir -p /boot/efi
-            mount "${part_path}${efi_part_number}" /boot/efi
-
-            # Copy current /boot into new partition /boot
-            # including EFI boot partition content
-            cp -r /backup/boot/* /boot/
-            mkdir -p /boot/efi/EFI/qubes/fonts /boot/efi/EFI/qubes/entries
-            cp -ar /backup/efi/EFI/qubes/fonts /boot/efi/EFI/qubes/
-            cp -a /backup/efi/EFI/qubes/grubx64.efi /boot/efi/EFI/qubes/
-
-            # Replace block reference in fstab by UUID
-            # for /boot/efi it needed
-            if ! grep -q "UUID=$efi_uuid" /etc/fstab; then
-                boot_efi_ref="$(get_reference_from_fstab /boot/efi)"
-                sed -i "s|$boot_efi_ref|UUID=$efi_uuid|g" /etc/fstab
-            fi
-
-            # Add entry for /boot partition
-            boot_uuid="$(get_uuid_from_block "${part_path}${available_partnumber}")"
-            # There is no reason for boot_uuid being empty
-            # but in case we fallback to known entry point
-            if [ -n "$boot_uuid" ]; then
-                echo "UUID=$boot_uuid    /boot    ext4    defaults    1 2" >> /etc/fstab
-            else
-                echo "${part_path}${available_partnumber}    /boot    ext4    defaults    1 2" >> /etc/fstab
-            fi    
-        fi
-        # Modifiy EFI boot manager
-        efibootmgr_entry="$(efibootmgr | awk '/^BootCurrent:/{print $2}')"
-        if [ -z "$efibootmgr_entry" ]; then
-            efibootmgr_entry="$(efibootmgr -v | awk '/Qubes/{print $1;exit}')"
-            efibootmgr_entry="${efibootmgr_entry//Boot/}"
-            efibootmgr_entry="${efibootmgr_entry//\*/}"
-        fi
-        if [ -n "$efibootmgr_entry" ]; then
-            label="$(efibootmgr | awk "/Boot$efibootmgr_entry/{print \$2}")"
-            efibootmgr -b "$efibootmgr_entry" -B
-            efibootmgr -b "$efibootmgr_entry" -c -d "/dev/${efi_disk}" -L "$label" -l '\EFI\qubes\grubx64.efi'
-        else
-            efibootmgr -c -d "/dev/${efi_disk}" -L Qubes -l '\EFI\qubes\grubx64.efi'
-        fi
-
-        # Create default Grub config
-        default_grub_config
-        update_default_grub_config
-
-        # Create Grub config
-        mount /boot/efi || true
-        grub2-editenv /boot/efi/EFI/qubes/grubenv create
-        pushd /boot/grub2/
-        ln -sf ../efi/EFI/qubes/grubenv .
-        popd
-        grub2-mkconfig -o /boot/efi/EFI/qubes/grub.cfg
-
-        # Copy font
-        mkdir -p /boot/efi/EFI/qubes/fonts/
-        cp /usr/share/grub/unicode.pf2 /boot/efi/EFI/qubes/fonts/
-
-        # Set default plymouth theme
-        plymouth-set-default-theme qubes-dark
-
-        # Regenerate initrd
-        # shellcheck disable=SC2012
-        dracut -f --kver "$(ls -1 /lib/modules/ | sort -V | tail -1)"
-    fi
-}
-
-get_thin_pool_name() {
-    local root_dev root_pool
-    root_dev=$(df --output=source / | tail -1)
-    case "$root_dev" in (/dev/mapper/*) ;; (*) return;; esac
-    root_pool=$(lvs --no-headings --separator=/ -o vg_name,pool_lv "$root_dev" | tr -d ' ')
-    case "$root_pool" in (*/) return;; esac
-    echo "$root_pool"
-}
-
-get_pool_size() {
-    # we remove leading space
-    lvs --no-headings -o size "$1" --nosuffix --units b | tr -d ' '
-}
-
-get_tmeta_size() {
-    # we remove leading space
-    lvs --no-headings -o size "${1}_tmeta" --nosuffix --units b | tr -d ' '
-}
-
-recommended_size() {
-    local pool_size
-    local block_size="64k"
-    local max_thins="1000"
-    pool_size="$(get_pool_size "$1")"
-    if [ "$pool_size" -ge 1 ]; then
-        reco_tmeta_size="$(thin_metadata_size -n -u b --block-size="$block_size" --pool-size="$pool_size"b --max-thins="$max_thins")"
-    fi
-    # returned size unit is bytes
-    echo "$((2*reco_tmeta_size))"
-}
-
-set_tmeta_size() {
-    local metadata_size
-    metadata_size="$(recommended_size "$1")"
-    if [ -n "$metadata_size" ]; then
-        lvextend -L "$metadata_size"b "${1}_tmeta"
-    fi
-}
 
 shutdown_nonessential_vms() {
 
@@ -444,8 +76,14 @@ shutdown_nonessential_vms() {
     mapfile -t running_vms < <(qvm-ls --running --raw-list --fields name)
     keep_running=( dom0 "$usbvm" "$netvm" "$updatevm" "${extra_keep_running[@]}" )
     # all the updates-proxy targets
-    mapfile -t updates_proxy < <(grep '^\s*[^#].*target=' /etc/qubes-rpc/policy/qubes.UpdatesProxy | cut -d = -f 2)
-    keep_running+=( "${updates_proxy[@]}" )
+    if [ -e "/etc/qubes-rpc/policy/qubes.UpdatesProxy" ]; then
+        mapfile -t updates_proxy < <(grep '^\s*[^#].*target=' /etc/qubes-rpc/policy/qubes.UpdatesProxy | cut -d = -f 2)
+        keep_running+=( "${updates_proxy[@]}" )
+    fi
+    if [ -e "/etc/qubes/policy.d" ]; then
+      mapfile -t updates_proxy_new < <(grep qubes.UpdatesProxy /etc/qubes/policy.d/*.policy | grep '^\s*[^#].*target=' | cut -d = -f 2)
+      keep_running+=( "${updates_proxy_new[@]}" )
+    fi
 
     for vm in "${keep_running[@]}"
     do
@@ -467,6 +105,25 @@ shutdown_nonessential_vms() {
     fi
 }
 
+
+get_root_volume_name() {
+    local root_dev root_volume
+    root_dev=$(df --output=source / | tail -1)
+    case "$root_dev" in (/dev/mapper/*) ;; (*) return;; esac
+    root_volume=$(lvs --no-headings --separator=/ -o vg_name,lv_name "$root_dev" | tr -d ' ')
+    case "$root_volume" in (*/) return;; esac
+    echo "$root_volume"
+}
+
+get_root_group_name() {
+    local root_dev root_volume
+    root_dev=$(df --output=source / | tail -1)
+    case "$root_dev" in (/dev/mapper/*) ;; (*) return;; esac
+    root_group=$(lvs --no-headings -o vg_name "$root_dev" | tr -d ' ')
+    echo "$root_group"
+}
+
+
 #-----------------------------------------------------------------------------#
 
 if [[ $EUID -ne 0 ]]; then
@@ -474,7 +131,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o htrlsgydu:n:f:jkp --long help,all,update,template-standalone-upgrade,release-upgrade,dist-upgrade,setup-efi-grub,assumeyes,double-metadata-size,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,resync-appmenus-features,post-reboot,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o trslxyu:n:f:jk --long help,update,release-upgrade,dist-upgrade,template-standalone-upgrade,finalize,all-pre-reboot,all-post-reboot,assumeyes,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -482,26 +139,25 @@ fi
 eval set -- "$OPTS"
 
 # Common DNF options
-dnf_opts_noclean='--best --allowerasing --enablerepo=*testing*'
+dnf_opts_noclean='--best --allowerasing --enablerepo=qubes-dom0-current-testing'
 extra_keep_running=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h | --help) usage ;;
-        -a | --all)
-            double_metadata_size=1
+        --all-pre-reboot)
             update=1
-            template_standalone_upgrade=1
             release_upgrade=1
             dist_upgrade=1
-            update_grub=1
             ;;
-        -d | --double-metadata-size ) double_metadata_size=1;;
+        --all-post-reboot)
+            template_standalone_upgrade=1
+            finalize=1
+            ;;
         -t | --update ) update=1;;
         -l | --template-standalone-upgrade) template_standalone_upgrade=1;;
         -r | --release-upgrade) release_upgrade=1;;
         -s | --dist-upgrade ) dist_upgrade=1;;
-        -g | --setup-efi-grub ) update_grub=1;;
         -y | --assumeyes ) assumeyes=1;;
         -u | --usbvm ) usbvm="$2"; shift ;;
         -n | --netvm ) netvm="$2"; shift ;;
@@ -511,8 +167,7 @@ while [[ $# -gt 0 ]]; do
         --max-concurrency) max_concurrency="$2"; shift ;;
         -j | --skip-template-upgrade ) skip_template_upgrade=1;;
         -k | --skip-standalone-upgrade ) skip_standalone_upgrade=1;;
-        --resync-appmenus-features ) post_reboot=1;;
-        -p | --post-reboot ) post_reboot=1;;
+        -x | --finalize ) finalize=1;;
     esac
     shift
 done
@@ -537,96 +192,30 @@ max_concurrency="${max_concurrency:-4}"
 # Run prechecks first
 update_prechecks
 
-# Executing post upgrade tasks
-if [ "$post_reboot" == 1 ]; then
-    echo "---> (STAGE 6) Synchronizing menu entries and supported features"
-    if [ "$skip_template_upgrade" != 1 ]; then
-        mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
-    fi
-    if [ "$skip_standalone_upgrade" != 1 ]; then
-        mapfile -t standalone_vms < <(qvm-ls --raw-data --fields name,klass | grep 'StandaloneVM$' | cut -d '|' -f 1)
-    fi
-    if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
-        mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
-    fi
-    if [ -n "$only_update" ]; then
-        IFS=, read -ra all_vms <<<"${only_update}"
-    fi
-    if [ "${#all_vms[*]}" -gt 0 ]; then
-        for vm in ${all_vms[*]};
-        do
-            if ! qvm-run --service "$vm" qubes.PostInstall; then
-                echo "WARNING: Failed to execute qubes.PostInstall in $vm."
-            fi
-            qvm-shutdown "$vm"
-        done
-    fi
-    user=$(groupmems -l -g qubes | cut -f 1 -d ' ')
-    runuser -u "$user" -- qvm-appmenus --all --update
-
-    echo "---> (STAGE 6) Cleaning up salt"
-    qubesctl saltutil.clear_cache
-    qubesctl saltutil.sync_all
-
-    echo "---> (STAGE 6) Migrating templates for qvm-template"
-    if ! qvm-template migrate-from-rpmdb; then
-        echo "Warning: template migration failed"
-        echo "install updates and call 'sudo qvm-template migrate-from-rpmdb' manually"
-    fi
-
-    echo "---> (STAGE 6) Adjusting default kernel"
-    default_kernel=$(qubes-prefs default-kernel)
-    if [[ "$default_kernel" = "5.4"*"fc25" ]]; then
-        new_kernel=$(rpm -q --qf '%{VERSION}-%{RELEASE}\n'  kernel-qubes-vm | sort -V | tail -1)
-        new_kernel="${new_kernel%.qubes}"
-        if ! [ -e "/var/lib/qubes/vm-kernels/$new_kernel" ]; then
-            echo "ERROR: Kernel $new_kernel installed but /var/lib/qubes/vm-kernels/$new_kernel is missing!"
-            exit 1
-        fi
-        echo "Changing default kernel from $default_kernel to $new_kernel"
-        qubes-prefs default-kernel "$new_kernel"
-    fi
-
-    exit 0
-fi
-
-trap 'exit_migration' 0 1 2 3 6 15
 # shellcheck disable=SC1003
-echo 'WARNING: /!\ ENSURE TO HAVE MADE A BACKUP OF ALL YOUR VMs AND dom0 DATA /!\'
+echo 'WARNING: /!\ MAKE SURE YOU HAVE MADE A BACKUP OF ALL YOUR VMs AND dom0 DATA /!\'
 if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
-    # Backup xen and kernel cmdline
-    cat /proc/cmdline > /tmp/kernel_cmdline
-    if ! [ -f /tmp/xen_cmdline ]; then
-        xl info xen_commandline > /tmp/xen_cmdline || {
-            echo "ERROR: Failed to get Xen cmdline, have you restarted the system after previous upgrade stage?"
-            exit 1
-        }
-        if ! grep -q gnttab_max_frames /tmp/xen_cmdline; then
-            sed -e 's:$: gnttab_max_frames=2048 gnttab_max_maptrack_frames=4096:' -i /tmp/xen_cmdline
-        fi
-    fi
-
     # Shutdown nonessential VMs
     shutdown_nonessential_vms
 
-    pool_name=$(get_thin_pool_name)
-    if [ "$double_metadata_size" == 1 ]; then
-        if [ -z "$pool_name" ]; then
-            echo "---> (STAGE 0) Skipping - no LVM thin pool found"
-        elif [ "$(get_tmeta_size "$pool_name")" -ge "$(recommended_size "$pool_name")" ]; then
-            echo "---> (STAGE 0) Skipping - already right size"
-        else
-            echo "---> (STAGE 0) Adjusting LVM thin pool metadata size..."
-            set_tmeta_size "$pool_name"
-        fi
-    fi
-
-    if [ "$update" = "1" ] && [ "$(rpm -q --qf='%{VERSION}' qubes-release)" = "4.1" ]; then
+    if [ "$update" = "1" ] && [ "$(rpm -q --qf='%{VERSION}' qubes-release)" = "4.2" ]; then
         echo "---> (STAGE 1) Updating dom0... already done, skipping"
         update=
     fi
 
     if [ "$update" == "1" ]; then
+      root_vol_name=$(get_root_volume_name)
+      root_group_name=$(get_root_group_name)
+      if [ -z "$root_vol_name" ]; then
+        echo "---> (STAGE 1) Skipping dom0 snapshot - no LVM volume found"
+      elif lvs "$root_group_name/Qubes41UpgradeBackup" > /dev/null 2>&1 ; then
+        echo "---> (STAGE 1) Skipping dom0 snapshot - snapshot already exists. If you want to make a snapshot anyway, remove the existing one using lvremove $root_group_name/Qubes41UpgradeBackup"
+      elif [ "$assumeyes" == "1" ] || confirm "---> (STAGE 1) Do you want to make a dom0 snapshot?"; then
+        # make a dom0 snapshot
+        lvcreate -n Qubes41UpgradeBackup -s "$root_vol_name"
+        echo "--> If upgrade to 4.2 fails, you can restore your dom0 snapshot with sudo lvconvert --merge $root_group_name/Qubes41UpgradeBackup. Reboot after restoration."
+      fi
+
         # Ensure 'gui' and 'qrexec' in default template used
         # for management else 'qubesctl' will failed
         management_template="$(qvm-prefs "$(qubes-prefs management_dispvm)" template)"
@@ -665,8 +254,58 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         qvm-start "$updatevm"
     fi
 
+    if [ "$release_upgrade" == "1" ]; then
+        echo "---> (STAGE 2) Upgrading 'qubes-release'..."
+        # shellcheck disable=SC2086
+        qubes-dom0-update $dnf_opts google-noto-sans-fonts google-noto-serif-fonts
+        qubes-dom0-update $dnf_opts --releasever=4.2 qubes-release
+        rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-37-primary
+        if ! grep -q fc37 /etc/yum.repos.d/qubes-dom0.repo; then
+            echo "WARNING: /etc/yum.repos.d/qubes-dom0.repo is not updated to R4.2 version"
+            if [ -f /etc/yum.repos.d/qubes-dom0.repo ] && \
+                    grep -q fc37 /etc/yum.repos.d/qubes-dom0.repo.rpmnew; then
+                echo "INFO: Found R4.2 repositories in /etc/yum.repos.d/qubes-dom0.repo.rpmnew"
+                if [ "$assumeyes" == "1" ] || confirm "---> Replace qubes-dom0.repo with qubes-dom0.repo.rpmnew?"; then
+                    mv --backup=simple --suffix=.bak /etc/yum.repos.d/qubes-dom0.repo.rpmnew \
+                                /etc/yum.repos.d/qubes-dom0.repo
+                    echo "INFO: Old /etc/yum.repos.d/qubes-dom0.repo saved with .bak extension"
+                fi
+            fi
+        fi
+    fi
+
+    if [ "$dist_upgrade" == "1" ]; then
+        echo "---> (STAGE 3) Upgrading to QubesOS R4.2 and Fedora 37 repositories..."
+        # xscreensaver remains unsuable while upgrading
+        # it's impossible to unlock it due to PAM update
+        echo "INFO: Xscreensaver has been killed. Desktop won't lock before next reboot."
+        pkill xscreensaver || true
+
+        # Don't clean cache of previous transaction for the requested packages.
+        # shellcheck disable=SC2086
+        qubes-dom0-update ${dnf_opts_noclean} --downloadonly --force-xen-upgrade --action=distro-sync || exit_code=$?
+        if [ -z "$exit_code" ] || [ "$exit_code" == 100 ]; then
+            if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all VM?"; then
+                qvm-shutdown --wait --all
+
+                # distro-sync phase
+                if [ "$assumeyes" == 1 ]; then
+                    dnf distro-sync -y --exclude="kernel-$(uname -r)" --best --allowerasing
+                else
+                    dnf distro-sync --exclude="kernel-$(uname -r)" --best --allowerasing
+                fi
+
+            else
+                echo "WARNING: dist-upgrade stage canceled."
+            fi
+        else
+            false
+        fi
+        echo "INFO: Please ensure you have completed stages 1, 2 and 3 and reboot before continuing."
+    fi
+
     if [ "$template_standalone_upgrade" == 1 ]; then
-        echo "---> (STAGE 2) Upgrade templates and standalone VMs to R4.1 repository..."
+        echo "---> (STAGE 4) Upgrade templates and standalone VMs to R4.1 repository..."
         if [ "$skip_template_upgrade" != 1 ]; then
             mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
         fi
@@ -698,17 +337,18 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                     case "$exit_code" in
                         2) 
                             echo "ERROR: Unsupported distribution for $vm."
-                            echo "It may still work under R4.1 but it will not get new features, nor important updates (including security fixes)."
+                            echo "It may still work under R4.2 but it will not get new features, nor important updates (including security fixes)."
                             echo "Consider switching to supported distribution - see https:///www.qubes-os.org/doc/supported-releases/"
                             ;;
                         3) 
-                            echo "ERROR: An error occured during upgrade transaction for $vm."
+                            echo "ERROR: An error occurred during upgrade transaction for $vm."
                             ;;
                         *)
-                            echo "ERROR: A general error occured while upgrading $vm (exit code $exit_code)."
+                            echo "ERROR: A general error occurred while upgrading $vm (exit code $exit_code)."
                             ;;
                     esac
                     if [ "$assumeyes" != "1" ] && ! confirm "-> Continue?"; then
+                        echo "REVERTING template to pre-ugrade state"
                         qvm-volume revert "$vm":root
                         exit 1
                     fi
@@ -719,108 +359,62 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         shutdown_nonessential_vms
     fi
 
-    if [ "$release_upgrade" == "1" ]; then
-        echo "---> (STAGE 3) Upgrading 'qubes-release' and 'python?-systemd'..."
-        # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts --releasever=4.1 qubes-release 'python?-systemd'
-        rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-32-primary
-        if ! grep -q fc32 /etc/yum.repos.d/qubes-dom0.repo; then
-            echo "WARNING: /etc/yum.repos.d/qubes-dom0.repo is not updated to R4.1 version"
-            if [ -f /etc/yum.repos.d/qubes-dom0.repo ] && \
-                    grep -q fc32 /etc/yum.repos.d/qubes-dom0.repo.rpmnew; then
-                echo "INFO: Found R4.1 repositories in /etc/yum.repos.d/qubes-dom0.repo.rpmnew"
-                if [ "$assumeyes" == "1" ] || confirm "---> Replace qubes-dom0.repo with qubes-dom0.repo.rpmnew?"; then
-                    mv --backup=simple --suffix=.bak /etc/yum.repos.d/qubes-dom0.repo.rpmnew \
-                                /etc/yum.repos.d/qubes-dom0.repo
-                    echo "INFO: Old /etc/yum.repos.d/qubes-dom0.repo saved with .bak extension"
-                fi
-            fi
-        fi
-    fi
+    # Executing post upgrade tasks
+  if [ "$finalize" == 1 ]; then
+      echo "---> (STAGE 5) Synchronizing menu entries and supported features"
+      if [ "$skip_template_upgrade" != 1 ]; then
+          mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
+      fi
+      if [ "$skip_standalone_upgrade" != 1 ]; then
+          mapfile -t standalone_vms < <(qvm-ls --raw-data --fields name,klass | grep 'StandaloneVM$' | cut -d '|' -f 1)
+      fi
+      if [ "$skip_template_upgrade" != 1 ] || [ "$skip_standalone_upgrade" != 1 ]; then
+          mapfile -t all_vms < <(echo "${template_vms[@]}" "${standalone_vms[@]}")
+      fi
+      if [ -n "$only_update" ]; then
+          IFS=, read -ra all_vms <<<"${only_update}"
+      fi
+      if [ "${#all_vms[*]}" -gt 0 ]; then
+          for vm in ${all_vms[*]};
+          do
+              if ! qvm-run --service "$vm" qubes.PostInstall; then
+                  echo "WARNING: Failed to execute qubes.PostInstall in $vm."
+              fi
+              qvm-shutdown "$vm"
+          done
+      fi
+      user=$(groupmems -l -g qubes | cut -f 1 -d ' ')
+      runuser -u "$user" -- qvm-appmenus --all --update
 
-    if [ "$dist_upgrade" == "1" ]; then
-        echo "---> (STAGE 4) Upgrading to QubesOS R4.1 and Fedora 32 repositories..."
-        # xscreensaver remains unsuable while upgrading
-        # it's impossible to unlock it due to PAM update
-        echo "INFO: Xscreensaver has been killed. Desktop won't lock before next reboot."
-        pkill xscreensaver || true
+      echo "---> (STAGE 5) Cleaning up salt"
+      echo "Error on ext_pillar interface qvm_prefs is expected"
+      qubesctl saltutil.clear_cache
+      qubesctl saltutil.sync_all
 
-        # Install Audio and Gui daemons
-        # it should be pulled by distro-sync
-        # but better to ensure that
-        packages="qubes-audio-daemon qubes-gui-daemon"
+      echo "---> (STAGE 5) Adjusting default kernel"
+      default_kernel="$(qubes-prefs default-kernel)"
+      default_kernel_path="/var/lib/qubes/vm-kernels/$default_kernel"
+      default_kernel_package="$(rpm --qf '%{NAME}' -qf "$default_kernel_path")"
+      if [ "$default_kernel_package" = "kernel-qubes-vm" ]; then
+          new_kernel=$(rpm -q --qf '%{VERSION}-%{RELEASE}\n'  kernel-qubes-vm | sort -V | tail -1)
+          new_kernel="${new_kernel/.qubes/}"
+          if ! [ -e "/var/lib/qubes/vm-kernels/$new_kernel" ]; then
+              echo "ERROR: Kernel $new_kernel installed but /var/lib/qubes/vm-kernels/$new_kernel is missing!"
+              exit 1
+          fi
+          echo "Changing default kernel from $default_kernel to $new_kernel"
+          qubes-prefs default-kernel "$new_kernel"
+      fi
 
-        # Install new Qubes Grub theme before not being able to
-        # download anything else due to distro-sync
-        packages="$packages grub2-qubes-theme qubes-artwork-plymouth"
-        if is_qubes_uefi; then
-            packages="$packages grub2-efi-x64"
-        fi
-        # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts --downloadonly $packages
-
-        # Don't clean cache of previous transaction for the requested packages.
-        # shellcheck disable=SC2086
-        qubes-dom0-update ${dnf_opts_noclean} --downloadonly --action=distro-sync || exit_code=$?
-        if [ -z "$exit_code" ] || [ "$exit_code" == 100 ]; then
-            if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all VM?"; then
-                qvm-shutdown --wait --all
-
-                # distro-sync phase
-                if [ "$assumeyes" == 1 ]; then
-                    dnf distro-sync -y --exclude="kernel-$(uname -r)" --best --allowerasing
-                else
-                    dnf distro-sync --exclude="kernel-$(uname -r)" --best --allowerasing
-                fi
-
-                # install requested packages
-                for pkg in $packages
-                do
-                    pkg_rpm="$(ls /var/lib/qubes/updates/rpm/$pkg*.rpm)"
-                    if [ -e "$pkg_rpm" ]; then
-                        packages_rpm="$packages_rpm $pkg_rpm"
-                    fi
-                done
-
-                if [ -n "$packages_rpm" ]; then
-                    # shellcheck disable=SC2086
-                    if [ "$assumeyes" == 1 ]; then
-                        dnf install -y --best --allowerasing $packages_rpm
-                    else
-                        dnf install --best --allowerasing $packages_rpm
-                    fi
-                fi
-
-                # Fix dbus to dbus-broker change
-                systemctl enable dbus-broker
-
-                # Preset selected other services
-                systemctl preset qubes-qrexec-policy-daemon
-                systemctl preset logrotate systemd-pstore
-
-                # this file is created by salt on fresh install if sys-usb is
-                # enabled, do it here on upgrade
-                if systemctl -q is-enabled "qubes-vm@$usbvm.service"; then
-                    mkdir -p "/etc/systemd/system/qubes-vm@$usbvm.service.d"
-                    cat >"/etc/systemd/system/qubes-vm@$usbvm.service.d/50_autostart.conf" <<EOF
-[Unit]
-Before=systemd-user-sessions.service
-EOF
-                fi
-
-                # Update legacy Grub if needed
-                update_legacy_grub
-            else
-                echo "WARNING: dist-upgrade stage canceled."
-            fi
+      root_vol_name=$(get_root_volume_name)
+      if [ "$root_vol_name" ]; then
+        root_group_name=$(get_root_group_name)
+        if [ "$assumeyes" == "1" ]; then
+          lvremove -f "$root_group_name/Qubes41UpgradeBackup"
         else
-            false
+          lvremove "$root_group_name/Qubes41UpgradeBackup"
         fi
-    fi
-
-    if [ "$update_grub" == "1" ]; then
-        echo "---> (STAGE 5) Installing EFI Grub..."
-        setup_efi_grub
-    fi
-    echo "INFO: Please ensure to have completed all the stages and reboot before continuing."
+      fi
+      exit 0
+  fi
 fi
