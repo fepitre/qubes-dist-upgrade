@@ -14,7 +14,7 @@ scriptsdir=/usr/lib/qubes
 usage() {
 echo "Usage: $0 [OPTIONS]...
 
-This script is used for updating current QubesOS R4.0 to R4.1.
+This script is used for updating current QubesOS R4.1 to R4.2.
 
 Options:
     --update, -t                       (STAGE 1) Update of dom0, TemplatesVM and StandaloneVM.
