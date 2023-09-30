@@ -18,9 +18,9 @@ This script is used for updating current QubesOS R4.1 to R4.2.
 
 Options:
     --update, -t                       (STAGE 1) Update of dom0, TemplatesVM and StandaloneVM.
-    --release-upgrade, -r              (STAGE 2) Update 'qubes-release' for Qubes R4.1.
-    --dist-upgrade, -s                 (STAGE 3) Upgrade to Qubes R4.1 and Fedora 32 repositories.
-    --template-standalone-upgrade, -l  (STAGE 4) Upgrade templates and standalone VMs to R4.1 repository.
+    --release-upgrade, -r              (STAGE 2) Update 'qubes-release' for Qubes R4.2.
+    --dist-upgrade, -s                 (STAGE 3) Upgrade to Qubes R4.2 and Fedora 37 repositories.
+    --template-standalone-upgrade, -l  (STAGE 4) Upgrade templates and standalone VMs to R4.2 repository.
     --finalize, -x                     (STAGE 5) Finalize upgrade. It does:
                                          - resync applications and features
                                          - cleanup salt states
