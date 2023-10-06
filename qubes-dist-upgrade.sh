@@ -3,6 +3,7 @@
 # Frédéric Pierret (fepitre) frederic.pierret@qubes-os.org
 
 set -e
+shopt -s nullglob
 if [ "${VERBOSE:-0}" -ge 2 ] || [ "${DEBUG:-0}" -eq 1 ]; then
     set -x
 fi
@@ -123,6 +124,16 @@ get_root_group_name() {
     echo "$root_group"
 }
 
+# restore legacy policy from .rpmsave files, to not change the policy semantics
+restore_rpmsave_policy() {
+    local orig_policy_rpmsave_files=( "$@" )
+    for policy_file in /etc/qubes-rpc/policy/*.rpmsave; do
+        # this works because policy filenames do not have spaces
+        if ! [[ "${orig_policy_rpmsave_files[*]}" == *" $policy_file "* ]]; then
+            mv "${policy_file}" "${policy_file%.rpmsave}"
+        fi
+    done
+}
 
 #-----------------------------------------------------------------------------#
 
@@ -288,11 +299,19 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all VM?"; then
                 qvm-shutdown --wait --all
 
+                rpmsave_policy_files_before=( "/etc/qubes-rpc/policy/"*.rpmsave )
+                update_ret=0
                 # distro-sync phase
                 if [ "$assumeyes" == 1 ]; then
-                    dnf distro-sync -y --exclude="kernel-$(uname -r)" --best --allowerasing
+                    dnf distro-sync -y --exclude="kernel-$(uname -r)" --best --allowerasing || update_ret=$?
                 else
-                    dnf distro-sync --exclude="kernel-$(uname -r)" --best --allowerasing
+                    dnf distro-sync --exclude="kernel-$(uname -r)" --best --allowerasing || update_ret=$?
+                fi
+                # fixup the policy regardless of the result
+                restore_rpmsave_policy "${rpmsave_policy_files_before[@]}"
+
+                if [ "$update_ret" -ne 0 ]; then
+                    exit "$update_ret"
                 fi
 
             else
