@@ -124,6 +124,10 @@ get_root_group_name() {
     echo "$root_group"
 }
 
+get_volume_type() {
+    lvs --noheadings --options lv_layout "$1" | tr -d ' '
+}
+
 # restore legacy policy from .rpmsave files, to not change the policy semantics
 restore_rpmsave_policy() {
     local orig_policy_rpmsave_files=( "$@" )
@@ -219,6 +223,8 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
       root_group_name=$(get_root_group_name)
       if [ -z "$root_vol_name" ]; then
         echo "---> (STAGE 1) Skipping dom0 snapshot - no LVM volume found"
+      elif [ "$(get_volume_type "$root_vol_name")" != "thin,sparse" ] ; then
+        echo "---> (STAGE 1) Skipping dom0 snapshot - no not a thin volume"
       elif lvs "$root_group_name/Qubes41UpgradeBackup" > /dev/null 2>&1 ; then
         echo "---> (STAGE 1) Skipping dom0 snapshot - snapshot already exists. If you want to make a snapshot anyway, remove the existing one using lvremove $root_group_name/Qubes41UpgradeBackup"
       elif [ "$assumeyes" == "1" ] || confirm "---> (STAGE 1) Do you want to make a dom0 snapshot?"; then
@@ -428,10 +434,12 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
       root_vol_name=$(get_root_volume_name)
       if [ "$root_vol_name" ]; then
         root_group_name=$(get_root_group_name)
-        if [ "$assumeyes" == "1" ]; then
-          lvremove -f "$root_group_name/Qubes41UpgradeBackup"
-        else
-          lvremove "$root_group_name/Qubes41UpgradeBackup"
+        if lvs "$root_group_name/Qubes41UpgradeBackup" > /dev/null 2>&1; then
+          if [ "$assumeyes" == "1" ]; then
+            lvremove -f "$root_group_name/Qubes41UpgradeBackup"
+          else
+            lvremove "$root_group_name/Qubes41UpgradeBackup"
+          fi
         fi
       fi
       exit 0
