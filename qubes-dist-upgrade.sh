@@ -25,8 +25,10 @@ Options:
     --finalize, -x                     (STAGE 5) Finalize upgrade. It does:
                                          - resync applications and features
                                          - cleanup salt states
-    --all-pre-reboot                   Execute stages 1 do 3
-    --all-post-reboot                  Execute stages 4 and 5
+    --convert-policy, -p               (STAGE 6) Convert qrexec policy in /etc/qubes-rpc/policy
+                                       to the new format in /etc/qubes/policy.d.
+    --all-pre-reboot                   Execute stages 1 to 3
+    --all-post-reboot                  Execute stages 4 to 6
 
     --assumeyes, -y                    Automatically answer yes for all questions.
     --usbvm, -u                        Current UsbVM defined (default 'sys-usb').
@@ -146,7 +148,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-if ! OPTS=$(getopt -o trslxyu:n:f:jk --long help,update,release-upgrade,dist-upgrade,template-standalone-upgrade,finalize,all-pre-reboot,all-post-reboot,assumeyes,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
+if ! OPTS=$(getopt -o trslxyu:n:f:jkp --long help,update,release-upgrade,dist-upgrade,template-standalone-upgrade,finalize,convert-policy,all-pre-reboot,all-post-reboot,assumeyes,usbvm:,netvm:,updatevm:,skip-template-upgrade,skip-standalone-upgrade,only-update:,max-concurrency:,keep-running: -n "$0" -- "$@"); then
     echo "ERROR: Failed while parsing options."
     exit 1
 fi
@@ -156,6 +158,7 @@ eval set -- "$OPTS"
 # Common DNF options
 dnf_opts_noclean='--best --allowerasing --enablerepo=qubes-dom0-current-testing'
 extra_keep_running=()
+convert_policy=
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -168,6 +171,7 @@ while [[ $# -gt 0 ]]; do
         --all-post-reboot)
             template_standalone_upgrade=1
             finalize=1
+            convert_policy=1
             ;;
         -t | --update ) update=1;;
         -l | --template-standalone-upgrade) template_standalone_upgrade=1;;
@@ -183,6 +187,7 @@ while [[ $# -gt 0 ]]; do
         -j | --skip-template-upgrade ) skip_template_upgrade=1;;
         -k | --skip-standalone-upgrade ) skip_standalone_upgrade=1;;
         -x | --finalize ) finalize=1;;
+        -p | --convert-policy ) convert_policy=1;;
     esac
     shift
 done
@@ -442,6 +447,19 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
           fi
         fi
       fi
-      exit 0
+  fi
+
+  if [ "$convert_policy" == 1 ]; then
+    echo "---> (STAGE 6) Convert qrexec policy to the new format, it may take several minutes"
+    # R4.1 used to have user=root in qubes.Input* policies, which in fact never
+    # worked (was ignored) and was removed later
+    for policy in /etc/qubes-rpc/policy/qubes.InputMouse \
+                  /etc/qubes-rpc/policy/qubes.InputKeyboard \
+                  /etc/qubes-rpc/policy/qubes.InputTablet; do
+        if [ -r "$policy" ]; then
+            sed -i 's/,user=root//' "$policy"
+        fi
+    done
+    qrexec-legacy-convert
   fi
 fi
