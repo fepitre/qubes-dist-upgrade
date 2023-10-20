@@ -279,8 +279,12 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     if [ "$release_upgrade" == "1" ]; then
         echo "---> (STAGE 2) Upgrading 'qubes-release'..."
         # shellcheck disable=SC2086
-        qubes-dom0-update $dnf_opts google-noto-sans-fonts google-noto-serif-fonts
-        qubes-dom0-update $dnf_opts --releasever=4.2 qubes-release
+        if ! rpm -q google-noto-sans-fonts google-noto-serif-fonts >/dev/null; then
+            qubes-dom0-update $dnf_opts google-noto-sans-fonts google-noto-serif-fonts
+        fi
+        if [ "$(rpm -q --qf='%{VERSION}' qubes-release)" != "4.2" ]; then
+            qubes-dom0-update $dnf_opts --action=update --releasever=4.2 qubes-release
+        fi
         rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-37-primary
         if ! grep -q fc37 /etc/yum.repos.d/qubes-dom0.repo; then
             echo "WARNING: /etc/yum.repos.d/qubes-dom0.repo is not updated to R4.2 version"
