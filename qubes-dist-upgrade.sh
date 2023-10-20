@@ -282,6 +282,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         if ! rpm -q google-noto-sans-fonts google-noto-serif-fonts >/dev/null; then
             qubes-dom0-update $dnf_opts google-noto-sans-fonts google-noto-serif-fonts
         fi
+        rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-qubes-4.2-primary
         if [ "$(rpm -q --qf='%{VERSION}' qubes-release)" != "4.2" ]; then
             qubes-dom0-update $dnf_opts --action=update --releasever=4.2 qubes-release
         fi
