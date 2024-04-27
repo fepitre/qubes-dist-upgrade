@@ -50,7 +50,7 @@ Options:
 confirm() {
     read -r -p "${1} [y/N] " response
     case "$response" in
-        [yY]) 
+        [yY])
             true
             ;;
         *)
@@ -145,7 +145,7 @@ restore_rpmsave_policy() {
 #-----------------------------------------------------------------------------#
 
 if [[ $EUID -ne 0 ]]; then
-   echo "ERROR: This script must be run with root permissions" 
+   echo "ERROR: This script must be run with root permissions"
    exit 1
 fi
 
@@ -212,6 +212,20 @@ max_concurrency="${max_concurrency:-4}"
 
 # Run prechecks first
 update_prechecks
+
+# Automatically add qubes providing dom0 input devices to remain powered on
+if which xinput > /dev/null; then
+    read -r -a xinput_qubes <<< "$(xinput list --name-only | sed -n 's/\(^[a-zA-Z][a-zA-Z0-9_-]*\):.*$/\1/p')"
+    for qube in "${xinput_qubes[@]}"
+    do
+        if qvm-check -q "$qube"; then
+            echo "INFO: Found $qube providing input devices. It will be kept running."
+            extra_keep_running+=( "$qube" )
+        fi
+    done
+else
+    echo "WARNING: Unable to detect qubes providing input devices. PLease provide them using --keep-running option."
+fi
 
 # shellcheck disable=SC1003
 echo 'WARNING: /!\ MAKE SURE YOU HAVE MADE A BACKUP OF ALL YOUR VMs AND dom0 DATA /!\'
@@ -371,12 +385,12 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
                 qvm-shutdown --wait "$vm"
                 if [ -n "$exit_code" ]; then
                     case "$exit_code" in
-                        2) 
+                        2)
                             echo "ERROR: Unsupported distribution for $vm."
                             echo "It may still work under R4.2 but it will not get new features, nor important updates (including security fixes)."
                             echo "Consider switching to supported distribution - see https:///www.qubes-os.org/doc/supported-releases/"
                             ;;
-                        3) 
+                        3)
                             echo "ERROR: An error occurred during upgrade transaction for $vm."
                             ;;
                         *)
