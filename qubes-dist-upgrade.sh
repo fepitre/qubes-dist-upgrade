@@ -61,6 +61,7 @@ confirm() {
 
 
 update_prechecks() {
+    echo "INFO: Please wait while running pre-checks..."
     if qvm-check -q "$updatevm" 2>/dev/null; then
         if ! qvm-run -q "$updatevm" "command -v dnf"; then
            echo "ERROR: UpdateVM ($updatevm) should on a template that have 'dnf' installed - at least Fedora 30, Debian 11, or Whonix 16."
