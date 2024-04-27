@@ -6,6 +6,8 @@ License:	GPLv2
 BuildArch:	noarch
 Source0:	%{name}-%{version}.tar.gz
 
+Requires: xinput
+
 %description
 %{summary}.
 
