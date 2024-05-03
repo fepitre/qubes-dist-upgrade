@@ -327,8 +327,12 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
         # shellcheck disable=SC2086
         qubes-dom0-update ${dnf_opts_noclean} --downloadonly --force-xen-upgrade --action=distro-sync || exit_code=$?
         if [ -z "$exit_code" ] || [ "$exit_code" == 100 ]; then
-            if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all VM?"; then
-                qvm-shutdown --wait --all
+            if [ "$assumeyes" == "1" ] || confirm "---> Shutdown all qubes (requested keep running and input devices qubes will remain powered on)?"; then
+                qvm_shutdown_exclude=()
+                for qube in "${extra_keep_running[@]}"; do
+                    qvm_shutdown_exclude+=("--exclude=$qube")
+                done
+                qvm-shutdown --wait --all "${qvm_shutdown_exclude[@]}"
 
                 rpmsave_policy_files_before=( "/etc/qubes-rpc/policy/"*.rpmsave )
                 update_ret=0
