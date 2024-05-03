@@ -64,7 +64,7 @@ update_prechecks() {
     echo "INFO: Please wait while running pre-checks..."
     if qvm-check -q "$updatevm" 2>/dev/null; then
         if ! qvm-run -q "$updatevm" "command -v dnf"; then
-           echo "ERROR: UpdateVM ($updatevm) should on a template that have 'dnf' installed - at least Fedora 30, Debian 11, or Whonix 16."
+           echo "ERROR: UpdateVM ($updatevm) should on a template that have 'dnf' installed - at least Fedora 37, Debian 11, or Whonix 16."
            exit 1
         fi
     fi
@@ -359,7 +359,7 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
     fi
 
     if [ "$template_standalone_upgrade" == 1 ]; then
-        echo "---> (STAGE 4) Upgrade templates and standalone VMs to R4.1 repository..."
+        echo "---> (STAGE 4) Upgrade templates and standalone VMs to R4.2 repository..."
         if [ "$skip_template_upgrade" != 1 ]; then
             mapfile -t template_vms < <(qvm-ls --raw-data --fields name,klass | grep 'TemplateVM$' | cut -d '|' -f 1)
         fi
