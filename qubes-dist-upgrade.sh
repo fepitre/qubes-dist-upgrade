@@ -59,7 +59,6 @@ confirm() {
     esac
 }
 
-
 update_prechecks() {
     echo "INFO: Please wait while running pre-checks..."
     if qvm-check -q "$updatevm" 2>/dev/null; then
@@ -69,7 +68,6 @@ update_prechecks() {
         fi
     fi
 }
-
 
 shutdown_nonessential_vms() {
 
@@ -109,7 +107,6 @@ shutdown_nonessential_vms() {
     fi
 }
 
-
 get_root_volume_name() {
     local root_dev root_volume
     root_dev=$(df --output=source / | tail -1)
@@ -140,6 +137,10 @@ restore_rpmsave_policy() {
             mv "${policy_file}" "${policy_file%.rpmsave}"
         fi
     done
+}
+
+has_updated_qubes_version() {
+    grep -q 'VERSION_ID=4.2' /etc/os-release
 }
 
 #-----------------------------------------------------------------------------#
@@ -356,6 +357,11 @@ if [ "$assumeyes" == "1" ] || confirm "-> Launch upgrade process?"; then
             false
         fi
         echo "INFO: Please ensure you have completed stages 1, 2 and 3 and reboot before continuing."
+    fi
+
+    if { [ "$template_standalone_upgrade" == 1 ] || [ "$finalize" == 1 ]; } && ! has_updated_qubes_version; then
+        echo "ERROR: Cannot continue to STAGE 4, dom0 is not R4.2 yet. Any error happened in previous stages?"
+        exit 1
     fi
 
     if [ "$template_standalone_upgrade" == 1 ]; then
